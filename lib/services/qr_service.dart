@@ -81,16 +81,24 @@ class QRService {
     }
   }
 
-  /// Create QR widget with embedded letter overlay
-  static Widget createQRWidgetWithLetter({
+  /// Create QR widget with embedded identifier (letter or emoji) overlay
+  static Widget createQRWidgetWithIdentifier({
     required String data,
-    required String embeddedLetter,
+    required String embeddedIdentifier,
     double size = 200,
     Color? foregroundColor,
     Color? backgroundColor,
-    Color? embeddedLetterColor,
+    Color? embeddedIdentifierColor,
   }) {
     final qrData = generateQRData(data: data);
+    
+    // Check if identifier is an emoji (emojis are typically longer in character count)
+    final isEmoji = embeddedIdentifier.length > 1 || 
+                    embeddedIdentifier.runes.length > 1 ||
+                    RegExp(r'[\u{1F300}-\u{1F9FF}]', unicode: true).hasMatch(embeddedIdentifier);
+    
+    // Use larger font size for emojis, smaller for letters
+    final fontSize = isEmoji ? size * 0.15 : size * 0.12;
     
     return Stack(
       alignment: Alignment.center,
@@ -111,16 +119,36 @@ class QRService {
           ),
           child: Center(
             child: Text(
-              embeddedLetter.toUpperCase(),
+              embeddedIdentifier, // Don't uppercase - preserves emojis and case
               style: TextStyle(
-                fontSize: size * 0.12,
+                fontSize: fontSize,
                 fontWeight: FontWeight.bold,
-                color: embeddedLetterColor ?? foregroundColor ?? Colors.black,
+                color: embeddedIdentifierColor ?? foregroundColor ?? Colors.black,
               ),
             ),
           ),
         ),
       ],
+    );
+  }
+
+  /// Deprecated: Use createQRWidgetWithIdentifier instead
+  @Deprecated('Use createQRWidgetWithIdentifier instead')
+  static Widget createQRWidgetWithLetter({
+    required String data,
+    required String embeddedLetter,
+    double size = 200,
+    Color? foregroundColor,
+    Color? backgroundColor,
+    Color? embeddedLetterColor,
+  }) {
+    return createQRWidgetWithIdentifier(
+      data: data,
+      embeddedIdentifier: embeddedLetter,
+      size: size,
+      foregroundColor: foregroundColor,
+      backgroundColor: backgroundColor,
+      embeddedIdentifierColor: embeddedLetterColor,
     );
   }
 

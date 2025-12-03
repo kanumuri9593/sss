@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/qr_data.dart';
 import '../services/qr_service.dart';
+import 'qr_scanner_screen.dart';
 
 /// POC Screen for testing QR code generation and export features
 class QRPOCScreen extends StatefulWidget {
@@ -12,11 +13,11 @@ class QRPOCScreen extends StatefulWidget {
 
 class _QRPOCScreenState extends State<QRPOCScreen> {
   final TextEditingController _dataController = TextEditingController();
-  final TextEditingController _letterController = TextEditingController();
+  final TextEditingController _identifierController = TextEditingController();
   final GlobalKey _qrKey = GlobalKey();
   
   String _currentData = '';
-  String? _embeddedLetter;
+  String? _embeddedIdentifier;
   bool _isGenerating = false;
   String? _statusMessage;
   bool _isSuccess = false;
@@ -31,17 +32,34 @@ class _QRPOCScreenState extends State<QRPOCScreen> {
   @override
   void dispose() {
     _dataController.dispose();
-    _letterController.dispose();
+    _identifierController.dispose();
     super.dispose();
   }
 
   void _generateQR() {
     setState(() {
       _currentData = _dataController.text.trim();
-      _embeddedLetter = _letterController.text.trim().isEmpty 
+      _embeddedIdentifier = _identifierController.text.trim().isEmpty 
           ? null 
-          : _letterController.text.trim();
+          : _identifierController.text.trim();
       _statusMessage = null;
+    });
+  }
+
+  void _navigateToScanner() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const QRScannerScreen(),
+      ),
+    ).then((scannedData) {
+      if (scannedData != null && scannedData is String) {
+        setState(() {
+          _dataController.text = scannedData;
+          _currentData = scannedData;
+        });
+        _showMessage('Scanned data loaded', true);
+      }
     });
   }
 
@@ -251,10 +269,10 @@ class _QRPOCScreenState extends State<QRPOCScreen> {
     }
 
     Widget qrWidget;
-    if (_embeddedLetter != null && _embeddedLetter!.isNotEmpty) {
-      qrWidget = QRService.createQRWidgetWithLetter(
+    if (_embeddedIdentifier != null && _embeddedIdentifier!.isNotEmpty) {
+      qrWidget = QRService.createQRWidgetWithIdentifier(
         data: _currentData,
-        embeddedLetter: _embeddedLetter!,
+        embeddedIdentifier: _embeddedIdentifier!,
         size: 200,
       );
     } else {
@@ -294,28 +312,41 @@ class _QRPOCScreenState extends State<QRPOCScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Embedded letter input
+            // Embedded identifier input (letter or emoji)
             TextField(
-              controller: _letterController,
+              controller: _identifierController,
               decoration: const InputDecoration(
-                labelText: 'Embedded Letter (Optional)',
-                hintText: 'Enter a single letter or character',
+                labelText: 'Letter or Emoji (Optional)',
+                hintText: 'Enter a letter or emoji',
                 border: OutlineInputBorder(),
-                helperText: 'Add a letter/character in the center for uniqueness',
+                helperText: 'Add a letter or emoji in the center for uniqueness',
               ),
-              maxLength: 1,
-              textCapitalization: TextCapitalization.characters,
             ),
             const SizedBox(height: 16),
 
-            // Generate button
-            ElevatedButton.icon(
-              onPressed: _isGenerating ? null : _generateQR,
-              icon: const Icon(Icons.qr_code),
-              label: const Text('Generate QR Code'),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-              ),
+            // Generate and Scan buttons
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _isGenerating ? null : _generateQR,
+                    icon: const Icon(Icons.qr_code),
+                    label: const Text('Generate QR Code'),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  onPressed: _navigateToScanner,
+                  icon: const Icon(Icons.qr_code_scanner),
+                  label: const Text('Scan QR'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 24),
 
