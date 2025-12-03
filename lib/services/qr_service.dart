@@ -11,9 +11,26 @@ import 'package:permission_handler/permission_handler.dart';
 import '../models/qr_data.dart';
 import '../utils/file_utils.dart';
 
-/// QR Service for generating, exporting, and sharing QR codes
+/// QR Service for generating, exporting, sharing, and resolving QR codes.
 class QRService {
-  /// Generate QR data JSON string with system identifier
+  /// In-memory registry of QRData by id for this POC.
+  ///
+  /// In a production system this would be backed by a database or API.
+  static final Map<String, QRData> _qrRegistry = <String, QRData>{};
+
+  /// Register a QR entry in the in-memory registry.
+  static void registerQRData(QRData qrData) {
+    _qrRegistry[qrData.id] = qrData;
+  }
+
+  /// Look up QR data by id from the registry.
+  static QRData? getQRDataById(String id) {
+    return _qrRegistry[id];
+  }
+
+  /// Generate QR data JSON string with system identifier.
+  ///
+  /// This is kept for backwards compatibility and internal checks.
   static String generateQRData({
     required String data,
     String? customIdentifier,
@@ -22,7 +39,25 @@ class QRService {
       data: data,
       customIdentifier: customIdentifier,
     );
+    registerQRData(qrData);
     return qrData.toJsonString();
+  }
+
+  /// Generate a deep link for a new QR entry and register it.
+  ///
+  /// The deep link has the format: `sss://qr/<id>`.
+  static String generateDeepLink({
+    required String data,
+    String? customIdentifier,
+    String? category,
+  }) {
+    final qrData = QRData.create(
+      data: data,
+      customIdentifier: customIdentifier,
+      category: category,
+    );
+    registerQRData(qrData);
+    return qrData.buildDeepLink();
   }
 
   /// Create QR widget with optional embedded image or letter
@@ -35,10 +70,12 @@ class QRService {
     String? embeddedLetter,
     Color? embeddedLetterColor,
   }) {
-    final qrData = generateQRData(data: data);
-    
+    // For visual QR code generation we now encode the deep link so
+    // that native camera apps can deep link directly into this app.
+    final deepLink = generateDeepLink(data: data, customIdentifier: embeddedLetter);
+
     return QrImageView(
-      data: qrData,
+      data: deepLink,
       size: size,
       backgroundColor: backgroundColor ?? Colors.white,
       foregroundColor: foregroundColor ?? Colors.black,
@@ -90,8 +127,12 @@ class QRService {
     Color? backgroundColor,
     Color? embeddedIdentifierColor,
   }) {
-    final qrData = generateQRData(data: data);
-    
+    // Encode deep link as QR payload.
+    final deepLink = generateDeepLink(
+      data: data,
+      customIdentifier: embeddedIdentifier,
+    );
+
     // Check if identifier is an emoji (emojis are typically longer in character count)
     final isEmoji = embeddedIdentifier.length > 1 || 
                     embeddedIdentifier.runes.length > 1 ||
@@ -104,7 +145,7 @@ class QRService {
       alignment: Alignment.center,
       children: [
         QrImageView(
-          data: qrData,
+          data: deepLink,
           size: size,
           backgroundColor: backgroundColor ?? Colors.white,
           foregroundColor: foregroundColor ?? Colors.black,
@@ -167,7 +208,7 @@ class QRService {
         }
       }
 
-      final filePath = await FileUtils.getFilePath(fileName);
+      final filePath = await FileUtils.getDownloadFilePath(fileName);
       final file = File(filePath);
       await file.writeAsBytes(imageBytes);
 
@@ -245,7 +286,7 @@ class QRService {
         ),
       );
 
-      final filePath = await FileUtils.getFilePath(fileName);
+      final filePath = await FileUtils.getDownloadFilePath(fileName);
       final file = File(filePath);
       await file.writeAsBytes(await pdf.save());
 
@@ -278,6 +319,12 @@ class QRService {
 
   /// Verify if a scanned QR code was created by this system
   static bool verifySystemQR(String scannedData) {
+    // First, check if it is one of our deep links.
+    if (QRData.isSystemDeepLink(scannedData)) {
+      return true;
+    }
+
+    // Fallback: support legacy JSON-based payloads.
     return QRData.verifySystemQR(scannedData);
   }
 }

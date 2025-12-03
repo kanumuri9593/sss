@@ -53,5 +53,18 @@
 	<string>This app needs access to save QR code images to your photo library.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>This app needs access to the camera to scan QR codes.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.example.sss</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>sss</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

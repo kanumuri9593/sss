@@ -56,6 +56,9 @@ dependencies:
   # QR Code scanning
   mobile_scanner: ^5.2.3
 
+  # Deep linking
+  uni_links: ^0.5.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

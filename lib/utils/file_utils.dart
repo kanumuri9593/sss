@@ -3,6 +3,27 @@ import 'package:path_provider/path_provider.dart';
 
 /// File utilities for handling file operations
 class FileUtils {
+  /// Get the downloads directory for saving files
+  static Future<Directory> getDownloadsDirectory() async {
+    if (Platform.isAndroid) {
+      // On Android, try to use Downloads folder in external storage
+      final externalDir = await getExternalStorageDirectory();
+      if (externalDir != null) {
+        // Navigate to Downloads folder
+        final downloadsDir = Directory('${externalDir.path}/../Download');
+        if (!await downloadsDir.exists()) {
+          await downloadsDir.create(recursive: true);
+        }
+        return downloadsDir;
+      }
+      // Fallback to external storage root
+      return externalDir ?? await getApplicationDocumentsDirectory();
+    } else {
+      // On iOS, use documents directory (accessible via Files app)
+      return await getApplicationDocumentsDirectory();
+    }
+  }
+
   /// Get the application documents directory
   static Future<Directory> getDocumentsDirectory() async {
     if (Platform.isAndroid) {
@@ -10,6 +31,12 @@ class FileUtils {
     } else {
       return await getApplicationDocumentsDirectory();
     }
+  }
+
+  /// Get a file path in the downloads directory
+  static Future<String> getDownloadFilePath(String fileName) async {
+    final directory = await getDownloadsDirectory();
+    return '${directory.path}/$fileName';
   }
 
   /// Get a file path in the documents directory
