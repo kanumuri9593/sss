@@ -45,7 +45,19 @@ class NFCService {
   static Future<bool> isNFCAvailable() async {
     try {
       final result = await NfcManager.instance.checkAvailability();
-      return result == NfcAvailability.enabled;
+      debugPrint('NFC Availability Status: $result');
+      // On iOS, NFC can be enabled, disabled, or unsupported
+      // We return true only if it's enabled
+      final isAvailable = result == NfcAvailability.enabled;
+      if (!isAvailable) {
+        debugPrint('NFC Status: $result (enabled=${NfcAvailability.enabled})');
+        if (result == NfcAvailability.disabled) {
+          debugPrint('NFC is disabled. Please enable NFC in Settings > General > NFC.');
+        } else if (result == NfcAvailability.unsupported) {
+          debugPrint('NFC is not supported on this device.');
+        }
+      }
+      return isAvailable;
     } catch (e) {
       debugPrint('Error checking NFC availability: $e');
       return false;
@@ -279,13 +291,18 @@ class NFCService {
             }
 
             // Create NDEF message with deep link
-            // For URI records, type is [0x55] and payload is the URI string
+            // For URI records, payload must start with URI prefix byte
+            // 0x00 = no prefix (absolute URI), since we're writing a full URI (sss://...)
             final uriBytes = deepLink.codeUnits;
+            final payload = Uint8List(uriBytes.length + 1);
+            payload[0] = 0x00; // URI prefix: 0x00 = no prefix (absolute URI)
+            payload.setRange(1, payload.length, uriBytes);
+            
             final ndefRecord = NdefRecord(
               typeNameFormat: TypeNameFormat.wellKnown,
               type: Uint8List.fromList([0x55]), // URI record type
               identifier: Uint8List(0),
-              payload: Uint8List.fromList(uriBytes),
+              payload: payload,
             );
 
             final ndefMessage = NdefMessage(records: [ndefRecord]);

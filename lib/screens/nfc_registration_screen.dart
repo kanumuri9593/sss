@@ -65,13 +65,18 @@ class _NFCRegistrationScreenState extends State<NFCRegistrationScreen> {
       }
 
       String? actualTagId;
+      String? generatedId; // Store the ID from deep link generation to reuse
 
-      // Generate deep link for the data
+      // Generate deep link for the data (this creates and registers an entry)
+      // We'll update it with the actual tagId after writing
       final deepLink = NFCService.generateDeepLink(
         data: widget.data,
         customIdentifier: widget.customIdentifier,
         category: widget.title,
       );
+      
+      // Extract the ID from the generated deep link
+      generatedId = NFCTagData.extractIdFromDeepLink(deepLink);
 
       await NfcManager.instance.startSession(
         pollingOptions: {
@@ -119,13 +124,19 @@ class _NFCRegistrationScreenState extends State<NFCRegistrationScreen> {
             }
 
             // Create NDEF message with deep link
-            // For URI records, type is [0x55] and payload is the URI string
+            // For URI records, type is [0x55] and payload must start with URI prefix byte
+            // 0x00 = no prefix (absolute URI), 0x01 = http://www., 0x02 = https://www., etc.
+            // Since we're writing a full URI (sss://...), we use 0x00 (no prefix)
             final uriBytes = deepLink.codeUnits;
+            final payload = Uint8List(uriBytes.length + 1);
+            payload[0] = 0x00; // URI prefix: 0x00 = no prefix (absolute URI)
+            payload.setRange(1, payload.length, uriBytes);
+            
             final ndefRecord = NdefRecord(
               typeNameFormat: TypeNameFormat.wellKnown,
               type: Uint8List.fromList([0x55]), // URI record type
               identifier: Uint8List(0),
-              payload: Uint8List.fromList(uriBytes),
+              payload: payload,
             );
 
             final ndefMessage = NdefMessage(records: [ndefRecord]);
@@ -137,14 +148,22 @@ class _NFCRegistrationScreenState extends State<NFCRegistrationScreen> {
               await ndefIos.writeNdef(ndefMessage);
             }
 
-            // Update registry with actual tag ID
-            final nfcData = NFCTagData.create(
-              data: widget.data,
-              tagId: actualTagId,
-              customIdentifier: widget.customIdentifier,
-              category: widget.title,
-            );
-            NFCService.registerNFCTagData(nfcData);
+            // Update the existing registry entry with actual tag ID instead of creating a duplicate
+            if (generatedId != null) {
+              final existingData = NFCService.getNFCTagDataById(generatedId);
+              if (existingData != null) {
+                // Update the existing entry with the actual tag ID
+                final updatedData = NFCTagData(
+                  id: existingData.id,
+                  data: existingData.data,
+                  timestamp: existingData.timestamp,
+                  tagId: actualTagId,
+                  customIdentifier: existingData.customIdentifier,
+                  category: existingData.category,
+                );
+                NFCService.registerNFCTagData(updatedData);
+              }
+            }
 
             if (mounted) {
               setState(() {
@@ -154,16 +173,18 @@ class _NFCRegistrationScreenState extends State<NFCRegistrationScreen> {
               });
 
               // Navigate to detail screen after a short delay
-              Future.delayed(const Duration(seconds: 1), () {
-                if (mounted) {
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => NFCDetailScreen(nfcId: nfcData.id),
-                    ),
-                  );
-                }
-              });
+              if (generatedId != null) {
+                Future.delayed(const Duration(seconds: 1), () {
+                  if (mounted) {
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => NFCDetailScreen(nfcId: generatedId!),
+                      ),
+                    );
+                  }
+                });
+              }
             }
 
             await NfcManager.instance.stopSession();

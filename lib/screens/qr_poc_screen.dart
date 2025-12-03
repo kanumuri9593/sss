@@ -51,6 +51,7 @@ class _QRPOCScreenState extends State<QRPOCScreen> {
   bool _isGenerating = false;
   String? _statusMessage;
   bool _isSuccess = false;
+  String? _cachedDeepLink; // Cache deep link to avoid regenerating on every rebuild
 
   @override
   void initState() {
@@ -80,6 +81,8 @@ class _QRPOCScreenState extends State<QRPOCScreen> {
           ? null 
           : _identifierController.text.trim();
       _statusMessage = null;
+      // Clear cached deep link so it regenerates with new data
+      _cachedDeepLink = null;
     });
     // Dismiss keyboard
     FocusScope.of(context).unfocus();
@@ -96,6 +99,7 @@ class _QRPOCScreenState extends State<QRPOCScreen> {
         setState(() {
           _dataController.text = scannedData;
           _currentData = scannedData;
+          _cachedDeepLink = null; // Clear cache when new data is scanned
         });
         _showMessage('Scanned data loaded', true);
       }
@@ -265,12 +269,10 @@ class _QRPOCScreenState extends State<QRPOCScreen> {
       return;
     }
 
-    final deepLink = QRService.generateDeepLink(
-      data: _currentData,
-      customIdentifier: _embeddedIdentifier,
-      category: _title,
-    );
-    final isValid = QRData.isSystemDeepLink(deepLink);
+    // Verify without creating a new registry entry
+    // Check if current data is already a system deep link
+    final isValid = QRData.isSystemDeepLink(_currentData) || 
+                    QRData.verifySystemQR(_currentData);
 
     _showMessage(
       isValid 
@@ -315,8 +317,8 @@ class _QRPOCScreenState extends State<QRPOCScreen> {
       );
     }
 
-    // Generate deep link for the QR
-    final deepLink = QRService.generateDeepLink(
+    // Generate deep link only once and cache it to avoid creating duplicate registry entries
+    _cachedDeepLink ??= QRService.generateDeepLink(
       data: _currentData,
       customIdentifier: _embeddedIdentifier,
       category: _title,
@@ -325,7 +327,7 @@ class _QRPOCScreenState extends State<QRPOCScreen> {
     return RepaintBoundary(
       key: _qrKey,
       child: BrandedQRCard(
-        data: deepLink,
+        data: _cachedDeepLink!,
         title: _title,
         embeddedIdentifier: _embeddedIdentifier,
         qrSize: 200,

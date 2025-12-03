@@ -53,8 +53,6 @@
 	<string>This app needs access to save QR code images to your photo library.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>This app needs access to the camera to scan QR codes.</string>
-	<key>NFCReaderUsageDescription</key>
-	<string>This app uses NFC to read and write tags.</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

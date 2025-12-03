@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nfc_manager/nfc_manager.dart';
 import '../models/nfc_tag_data.dart';
 import '../services/nfc_service.dart';
 import 'nfc_reader_screen.dart';
@@ -48,6 +49,12 @@ class _NFCPOCScreenState extends State<NFCPOCScreen> {
     setState(() {
       _isNfcAvailable = isAvailable;
     });
+    
+    // If not available, show more detailed message
+    if (!isAvailable) {
+      final availability = await NfcManager.instance.checkAvailability();
+      debugPrint('NFC Availability: $availability');
+    }
   }
 
   void _navigateToReader() {
@@ -175,26 +182,57 @@ class _NFCPOCScreenState extends State<NFCPOCScreen> {
           children: [
             // NFC Availability Status
             if (!_isNfcAvailable)
-              Container(
-                padding: const EdgeInsets.all(12),
-                margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(
-                  color: Colors.orange[100],
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.orange),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.warning, color: Colors.orange[900]),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'NFC is not available on this device',
-                        style: TextStyle(color: Colors.orange[900]),
-                      ),
+              FutureBuilder<NfcAvailability>(
+                future: NfcManager.instance.checkAvailability(),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) {
+                    return const SizedBox.shrink();
+                  }
+                  final availability = snapshot.data!;
+                  String message;
+                  Color? bgColor;
+                  Color? borderColor;
+                  IconData icon;
+                  
+                  if (availability == NfcAvailability.disabled) {
+                    message = 'NFC is disabled. Please enable NFC in Settings > General > NFC.';
+                    bgColor = Colors.orange[100];
+                    borderColor = Colors.orange;
+                    icon = Icons.nfc;
+                  } else if (availability == NfcAvailability.unsupported) {
+                    message = 'NFC is not supported on this device.';
+                    bgColor = Colors.red[100];
+                    borderColor = Colors.red;
+                    icon = Icons.block;
+                  } else {
+                    message = 'NFC status: $availability';
+                    bgColor = Colors.grey[100];
+                    borderColor = Colors.grey;
+                    icon = Icons.info;
+                  }
+                  
+                  return Container(
+                    padding: const EdgeInsets.all(12),
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      color: bgColor,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: borderColor!),
                     ),
-                  ],
-                ),
+                    child: Row(
+                      children: [
+                        Icon(icon, color: borderColor),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            message,
+                            style: TextStyle(color: borderColor),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
               ),
 
             // Title/Category input
