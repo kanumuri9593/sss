@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:nfc_manager/nfc_manager.dart';
@@ -31,11 +32,22 @@ class _NFCRegistrationScreenState extends State<NFCRegistrationScreen> {
   String? _statusMessage;
   bool _isSuccess = false;
   String? _errorMessage;
+  Timer? _sessionTimeoutTimer;
 
   @override
   void initState() {
     super.initState();
     _checkNFCAvailability();
+  }
+
+  @override
+  void dispose() {
+    _sessionTimeoutTimer?.cancel();
+    // Ensure session is stopped when widget is disposed
+    NfcManager.instance.stopSession().catchError((e) {
+      debugPrint('Error stopping NFC session on dispose: $e');
+    });
+    super.dispose();
   }
 
   Future<void> _checkNFCAvailability() async {
@@ -48,19 +60,27 @@ class _NFCRegistrationScreenState extends State<NFCRegistrationScreen> {
   Future<void> _writeToTag() async {
     if (_isWriting) return;
 
+    if (!mounted) return;
+
     setState(() {
       _isWriting = true;
       _statusMessage = null;
       _errorMessage = null;
+      _isSuccess = false;
     });
+
+    // Cancel any existing timeout timer
+    _sessionTimeoutTimer?.cancel();
 
     try {
       final isAvailable = await NFCService.isNFCAvailable();
       if (!isAvailable) {
-        setState(() {
-          _errorMessage = 'NFC is not available on this device';
-          _isWriting = false;
-        });
+        if (mounted) {
+          setState(() {
+            _errorMessage = 'NFC is not available on this device';
+            _isWriting = false;
+          });
+        }
         return;
       }
 
@@ -78,14 +98,47 @@ class _NFCRegistrationScreenState extends State<NFCRegistrationScreen> {
       // Extract the ID from the generated deep link
       generatedId = NFCTagData.extractIdFromDeepLink(deepLink);
 
+      // Set up a timeout to stop the session if no tag is detected
+      _sessionTimeoutTimer = Timer(const Duration(seconds: 30), () {
+        if (mounted && _isWriting) {
+          NfcManager.instance.stopSession().then((_) {
+            if (mounted) {
+              setState(() {
+                _errorMessage = 'Timeout: No NFC tag detected. Please try again.';
+                _isWriting = false;
+              });
+            }
+          }).catchError((e) {
+            debugPrint('Error stopping session on timeout: $e');
+            if (mounted) {
+              setState(() {
+                _errorMessage = 'Timeout: No NFC tag detected. Please try again.';
+                _isWriting = false;
+              });
+            }
+          });
+        }
+      });
+
       await NfcManager.instance.startSession(
         pollingOptions: {
           NfcPollingOption.iso14443,
           NfcPollingOption.iso15693,
         },
         onDiscovered: (NfcTag tag) async {
+          // Cancel timeout since tag was discovered
+          _sessionTimeoutTimer?.cancel();
+          
+          bool sessionStopped = false;
+          
           try {
-            actualTagId = NFCService.extractTagId(tag);
+            // Extract tag ID
+            try {
+              actualTagId = NFCService.extractTagId(tag);
+            } catch (e) {
+              debugPrint('Error extracting tag ID: $e');
+              actualTagId = null;
+            }
 
             // Check if tag supports NDEF
             // Ndef is platform-specific
@@ -108,6 +161,7 @@ class _NFCRegistrationScreenState extends State<NFCRegistrationScreen> {
                 });
               }
               await NfcManager.instance.stopSession();
+              sessionStopped = true;
               return;
             }
 
@@ -120,6 +174,7 @@ class _NFCRegistrationScreenState extends State<NFCRegistrationScreen> {
                 });
               }
               await NfcManager.instance.stopSession();
+              sessionStopped = true;
               return;
             }
 
@@ -141,27 +196,46 @@ class _NFCRegistrationScreenState extends State<NFCRegistrationScreen> {
 
             final ndefMessage = NdefMessage(records: [ndefRecord]);
 
-            // Write to tag
-            if (ndefAndroid != null) {
-              await ndefAndroid.writeNdefMessage(ndefMessage);
-            } else if (ndefIos != null) {
-              await ndefIos.writeNdef(ndefMessage);
+            // Write to tag with proper error handling
+            try {
+              if (ndefAndroid != null) {
+                await ndefAndroid.writeNdefMessage(ndefMessage);
+              } else if (ndefIos != null) {
+                await ndefIos.writeNdef(ndefMessage);
+              }
+            } catch (writeError) {
+              debugPrint('Error during NFC write operation: $writeError');
+              if (mounted) {
+                setState(() {
+                  _errorMessage = 'Failed to write to tag: ${writeError.toString()}';
+                  _isWriting = false;
+                  _isSuccess = false;
+                });
+              }
+              await NfcManager.instance.stopSession();
+              sessionStopped = true;
+              return;
             }
 
             // Update the existing registry entry with actual tag ID instead of creating a duplicate
             if (generatedId != null) {
-              final existingData = NFCService.getNFCTagDataById(generatedId);
-              if (existingData != null) {
-                // Update the existing entry with the actual tag ID
-                final updatedData = NFCTagData(
-                  id: existingData.id,
-                  data: existingData.data,
-                  timestamp: existingData.timestamp,
-                  tagId: actualTagId,
-                  customIdentifier: existingData.customIdentifier,
-                  category: existingData.category,
-                );
-                NFCService.registerNFCTagData(updatedData);
+              try {
+                final existingData = NFCService.getNFCTagDataById(generatedId);
+                if (existingData != null) {
+                  // Update the existing entry with the actual tag ID
+                  final updatedData = NFCTagData(
+                    id: existingData.id,
+                    data: existingData.data,
+                    timestamp: existingData.timestamp,
+                    tagId: actualTagId,
+                    customIdentifier: existingData.customIdentifier,
+                    category: existingData.category,
+                  );
+                  NFCService.registerNFCTagData(updatedData);
+                }
+              } catch (e) {
+                debugPrint('Error updating registry: $e');
+                // Don't fail the write operation if registry update fails
               }
             }
 
@@ -188,26 +262,49 @@ class _NFCRegistrationScreenState extends State<NFCRegistrationScreen> {
             }
 
             await NfcManager.instance.stopSession();
-          } catch (e) {
+            sessionStopped = true;
+          } catch (e, stackTrace) {
             debugPrint('Error writing NFC tag: $e');
+            debugPrint('Stack trace: $stackTrace');
+            
+            if (!sessionStopped) {
+              try {
+                await NfcManager.instance.stopSession();
+              } catch (stopError) {
+                debugPrint('Error stopping session after exception: $stopError');
+              }
+            }
+            
             if (mounted) {
               setState(() {
-                _errorMessage = 'Error writing to tag: $e';
+                _errorMessage = 'Error writing to tag: ${e.toString()}';
                 _isWriting = false;
                 _isSuccess = false;
               });
             }
-            await NfcManager.instance.stopSession();
           }
         },
       );
-    } catch (e) {
+    } catch (e, stackTrace) {
       debugPrint('Error starting NFC write session: $e');
-      setState(() {
-        _errorMessage = 'Error starting NFC session: $e';
-        _isWriting = false;
-        _isSuccess = false;
-      });
+      debugPrint('Stack trace: $stackTrace');
+      
+      _sessionTimeoutTimer?.cancel();
+      
+      // Ensure session is stopped
+      try {
+        await NfcManager.instance.stopSession();
+      } catch (stopError) {
+        debugPrint('Error stopping session after start error: $stopError');
+      }
+      
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Error starting NFC session: ${e.toString()}';
+          _isWriting = false;
+          _isSuccess = false;
+        });
+      }
     }
   }
 

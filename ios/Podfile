@@ -1,5 +1,5 @@
 # Uncomment this line to define a global platform for your project
-platform :ios, '13.0'
+platform :ios, '15.0'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -40,11 +40,26 @@ post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
     target.build_configurations.each do |config|
+      # Set minimum deployment target for all pods
+      config.build_settings["IPHONEOS_DEPLOYMENT_TARGET"] = "15.0"
       # Exclude x86_64 architecture for device builds (arm64 only)
       # This ensures pods are built for arm64 when targeting physical devices
       config.build_settings["EXCLUDED_ARCHS[sdk=iphoneos*]"] = "x86_64"
-      # For simulator builds, allow both arm64 and x86_64 (for Intel Macs)
-      config.build_settings["EXCLUDED_ARCHS[sdk=iphonesimulator*]"] = ""
+      
+      # Handle ML Kit frameworks that don't support arm64-simulator
+      # These frameworks only have arm64 (device) and x86_64, not arm64-simulator
+      if target.name.include?("MLImage") || target.name.include?("MLKit") || target.name.include?("GoogleMLKit")
+        # Exclude arm64 for simulator builds to force x86_64 (Rosetta) on Apple Silicon
+        # This is necessary because ML Kit frameworks don't have arm64-simulator slices
+        config.build_settings["EXCLUDED_ARCHS[sdk=iphonesimulator*]"] = "arm64"
+        config.build_settings["BUILD_LIBRARY_FOR_DISTRIBUTION"] = "YES"
+      else
+        # For other frameworks, allow all architectures for simulator
+        config.build_settings["EXCLUDED_ARCHS[sdk=iphonesimulator*]"] = ""
+      end
+      
+      # Ensure we build for the correct architectures
+      config.build_settings["ONLY_ACTIVE_ARCH"] = "NO"
     end
   end
 end

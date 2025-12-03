@@ -33,8 +33,7 @@ class _MainTabScreenState extends State<MainTabScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('SSS - QR & NFC'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        title: const Text('SSS - Search & Scan'),
         bottom: TabBar(
           controller: _tabController,
           tabs: const [

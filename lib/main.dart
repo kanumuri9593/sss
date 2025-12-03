@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:uni_links/uni_links.dart';
+import 'theme/app_theme.dart';
 import 'screens/main_tab_screen.dart';
 import 'screens/qr_detail_screen.dart';
 import 'screens/nfc_detail_screen.dart';
@@ -118,11 +119,10 @@ class _MyAppState extends State<MyApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'SSS - QR & NFC',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
-      ),
+      title: 'SSS - Search & Scan',
+      theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
+      themeMode: ThemeMode.system,
       home: const MainTabScreen(),
       onGenerateRoute: (settings) {
         // Handle deep link routes (works for both QR and NFC)
