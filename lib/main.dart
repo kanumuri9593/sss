@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:uni_links/uni_links.dart';
-import 'screens/qr_poc_screen.dart';
+import 'screens/main_tab_screen.dart';
 import 'screens/qr_detail_screen.dart';
+import 'screens/nfc_detail_screen.dart';
+import 'services/qr_service.dart';
+import 'services/nfc_service.dart';
 
 void main() {
   runApp(const MyApp());
@@ -47,19 +50,59 @@ class _MyAppState extends State<MyApp> {
 
   void _handleDeepLink(String link) {
     debugPrint('Received deep link: $link');
-    // Parse sss://qr/<id>
+    // Parse sss://qr/<id> (works for both QR and NFC)
     final uri = Uri.parse(link);
     if (uri.scheme == 'sss' && uri.host == 'qr') {
-      final qrId = uri.pathSegments.isNotEmpty ? uri.pathSegments.first : '';
-      if (qrId.isNotEmpty) {
-        // Navigate to QR detail screen
+      final id = uri.pathSegments.isNotEmpty ? uri.pathSegments.first : '';
+      if (id.isNotEmpty) {
+        // Check if it's a QR code or NFC tag
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
-            Navigator.of(context).pushReplacement(
-              MaterialPageRoute(
-                builder: (context) => QRDetailScreen(qrId: qrId),
-              ),
-            );
+            // Try QR first, then NFC
+            final qrData = QRService.getQRDataById(id);
+            if (qrData != null) {
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(
+                  builder: (context) => QRDetailScreen(qrId: id),
+                ),
+              );
+            } else {
+              // Try NFC
+              final nfcData = NFCService.getNFCTagDataById(id);
+              if (nfcData != null) {
+                Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(
+                    builder: (context) => NFCDetailScreen(nfcId: id),
+                  ),
+                );
+              } else {
+                // Not found in either registry, show error
+                Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(
+                    builder: (context) => Scaffold(
+                      appBar: AppBar(
+                        title: const Text('Not Found'),
+                      ),
+                      body: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.error_outline, size: 64, color: Colors.red),
+                            const SizedBox(height: 16),
+                            const Text('Item not found'),
+                            const SizedBox(height: 24),
+                            ElevatedButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text('Go Back'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }
+            }
           }
         });
       }
@@ -75,21 +118,32 @@ class _MyAppState extends State<MyApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'SSS - QR Code Generator',
+      title: 'SSS - QR & NFC',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
-      home: const QRPOCScreen(),
+      home: const MainTabScreen(),
       onGenerateRoute: (settings) {
-        // Handle deep link routes
+        // Handle deep link routes (works for both QR and NFC)
         if (settings.name?.startsWith('sss://qr/') ?? false) {
           final uri = Uri.parse(settings.name!);
-          final qrId = uri.pathSegments.isNotEmpty ? uri.pathSegments.first : '';
-          if (qrId.isNotEmpty) {
-            return MaterialPageRoute(
-              builder: (context) => QRDetailScreen(qrId: qrId),
-            );
+          final id = uri.pathSegments.isNotEmpty ? uri.pathSegments.first : '';
+          if (id.isNotEmpty) {
+            // Try QR first, then NFC
+            final qrData = QRService.getQRDataById(id);
+            if (qrData != null) {
+              return MaterialPageRoute(
+                builder: (context) => QRDetailScreen(qrId: id),
+              );
+            } else {
+              final nfcData = NFCService.getNFCTagDataById(id);
+              if (nfcData != null) {
+                return MaterialPageRoute(
+                  builder: (context) => NFCDetailScreen(nfcId: id),
+                );
+              }
+            }
           }
         }
         return null;

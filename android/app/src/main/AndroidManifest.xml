@@ -9,6 +9,10 @@
     <!-- Camera permission for QR code scanning -->
     <uses-permission android:name="android.permission.CAMERA" />
     
+    <!-- NFC permission for NFC tag reading and writing -->
+    <uses-permission android:name="android.permission.NFC" />
+    <uses-feature android:name="android.hardware.nfc" android:required="false" />
+    
     <application
         android:label="sss"
         android:name="${applicationName}"
