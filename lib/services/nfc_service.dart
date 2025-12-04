@@ -1,8 +1,7 @@
-import 'dart:typed_data';
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:nfc_manager/nfc_manager.dart';
-import 'package:nfc_manager/src/nfc_manager_android/tags/ndef.dart' as android;
-import 'package:nfc_manager/src/nfc_manager_ios/tags/ndef.dart' as ios;
+import 'package:nfc_manager/nfc_manager_android.dart';
+import 'package:nfc_manager/nfc_manager_ios.dart';
 import 'package:ndef_record/ndef_record.dart';
 import '../models/nfc_tag_data.dart';
 import '../models/nfc_tag_details.dart';
@@ -20,13 +19,120 @@ class NFCService {
   /// Check if an error indicates an empty/unformatted NDEF tag.
   /// 
   /// This is a normal case and should be handled gracefully.
-  static bool _isEmptyNdefError(dynamic error) {
+  /// iOS returns error code 403 with message "NDEF tag does not contain any NDEF message"
+  /// Error format: "Error Domain=NFCError Code=403 "NDEF tag does not contain any NDEF message""
+  static bool isEmptyNdefError(dynamic error) {
+    // Convert error to string for analysis
     final errorString = error.toString();
-    return errorString.contains('NDEF') && 
-           (errorString.contains('does not contain') || 
-            errorString.contains('403') ||
-            errorString.contains('message') ||
-            errorString.contains('no NDEF'));
+    final lowerError = errorString.toLowerCase();
+    
+    // Primary check: iOS error code 403 (empty NDEF tag)
+    // Pattern: "Code=403" or "Code: 403" or just "403" with NDEF context
+    if (errorString.contains('403') || lowerError.contains('code=403') || lowerError.contains('code: 403')) {
+      // If it's error 403, it's almost certainly an empty NDEF tag
+      // But verify it's NDEF-related to be safe
+      if (lowerError.contains('ndef') || 
+          lowerError.contains('message') || 
+          lowerError.contains('nfc')) {
+        return true;
+      }
+    }
+    
+    // Secondary check: Empty NDEF message patterns
+    // Common patterns:
+    // - "NDEF tag does not contain any NDEF message"
+    // - "no NDEF message"
+    // - "NDEF tag is empty"
+    if (lowerError.contains('ndef')) {
+      if (lowerError.contains('does not contain') && 
+          (lowerError.contains('message') || lowerError.contains('ndef'))) {
+        return true;
+      }
+      if (lowerError.contains('no ndef') || 
+          lowerError.contains('ndef') && lowerError.contains('empty')) {
+        return true;
+      }
+      if (lowerError.contains('message') && 
+          (lowerError.contains('not') || lowerError.contains('empty'))) {
+        return true;
+      }
+    }
+    
+    return false;
+  }
+
+  /// Decode a single NDEF record to a readable string.
+  static String? decodeNdefRecord(NdefRecord record) {
+    // URI prefix map from NFC Forum "URI Record Type Definition"
+    const uriPrefixes = [
+      '',
+      'http://www.',
+      'https://www.',
+      'http://',
+      'https://',
+      'tel:',
+      'mailto:',
+      'ftp://anonymous:anonymous@',
+      'ftp://ftp.',
+      'ftps://',
+      'sftp://',
+      'smb://',
+      'nfs://',
+      'ftp://',
+      'dav://',
+      'news:',
+      'telnet://',
+      'imap:',
+      'rtsp://',
+      'urn:',
+      'pop:',
+      'sip:',
+      'sips:',
+      'tftp:',
+      'btspp://',
+      'btl2cap://',
+      'btgoep://',
+      'tcpobex://',
+      'irdaobex://',
+      'file://',
+      'urn:epc:id:',
+      'urn:epc:tag:',
+      'urn:epc:pat:',
+      'urn:epc:raw:',
+      'urn:epc:',
+      'urn:nfc:',
+    ];
+
+    if (record.typeNameFormat == TypeNameFormat.wellKnown) {
+      // URI record (type 0x55)
+      if (record.type.isNotEmpty && record.type[0] == 0x55) {
+        if (record.payload.isEmpty) return null;
+        final prefixCode = record.payload[0];
+        final prefix = prefixCode < uriPrefixes.length ? uriPrefixes[prefixCode] : '';
+        final uriBody = String.fromCharCodes(record.payload.skip(1));
+        return '$prefix$uriBody';
+      }
+
+      // Text record (type 0x54)
+      if (record.type.isNotEmpty && record.type[0] == 0x54) {
+        if (record.payload.isEmpty) return null;
+        final statusByte = record.payload[0];
+        final languageCodeLength = statusByte & 0x3F; // lower 6 bits
+        final isUtf16 = (statusByte & 0x80) != 0;
+        final textBytes = record.payload.skip(1 + languageCodeLength);
+        if (isUtf16) {
+          return String.fromCharCodes(textBytes);
+        }
+        return String.fromCharCodes(textBytes);
+      }
+    }
+
+    // Absolute URI or any other type -> try to decode payload as string
+    try {
+      return String.fromCharCodes(record.payload);
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Register an NFC entry in the in-memory registry.
@@ -96,11 +202,23 @@ class NFCService {
     return nfcData.buildDeepLink();
   }
 
+  /// Best-effort stop of any active NFC session to avoid "session already exists" errors on iOS.
+  static Future<void> stopExistingSession({String? reason}) async {
+    try {
+      await NfcManager.instance.stopSession();
+      debugPrint('Stopped existing NFC session (${reason ?? "cleanup"}).');
+    } catch (e) {
+      debugPrint('No existing NFC session to stop (${reason ?? "cleanup"}): $e');
+    }
+  }
+
   /// Read NFC tag and extract data.
   ///
   /// Returns the scanned data as a string, or null if reading failed.
   static Future<Map<String, dynamic>?> readNFCTag() async {
     try {
+      await stopExistingSession(reason: 'before starting read session');
+
       final availability = await NfcManager.instance.checkAvailability();
       final isAvailable = availability == NfcAvailability.enabled;
       if (!isAvailable) {
@@ -167,13 +285,13 @@ class NFCService {
             }
 
             // Try to read NDEF records
-            // Ndef is platform-specific
-            android.NdefAndroid? ndefAndroid;
-            ios.NdefIos? ndefIos;
+            NdefAndroid? ndefAndroid;
+            NdefIos? ndefIos;
             try {
-              ndefAndroid = android.NdefAndroid.from(tag);
-              if (ndefAndroid == null) {
-                ndefIos = ios.NdefIos.from(tag);
+              if (defaultTargetPlatform == TargetPlatform.android) {
+                ndefAndroid = NdefAndroid.from(tag);
+              } else if (defaultTargetPlatform == TargetPlatform.iOS) {
+                ndefIos = NdefIos.from(tag);
               }
               debugPrint('NDEF handler - Android: ${ndefAndroid != null}, iOS: ${ndefIos != null}');
             } catch (e) {
@@ -195,7 +313,7 @@ class NFCService {
                 
                 // Check if this is the "empty NDEF" error (iOS error 403)
                 // This is a normal case for empty/unformatted tags
-                if (_isEmptyNdefError(e)) {
+                if (isEmptyNdefError(e)) {
                   debugPrint('Tag is empty/unformatted (no NDEF data) - this is normal');
                   // This is OK - tag is detected but empty
                   ndefMessage = null;
@@ -211,29 +329,8 @@ class NFCService {
                 final record = ndefMessage.records.first;
                 debugPrint('Record type: ${record.typeNameFormat}, type bytes: ${record.type}');
                 
-                if (record.typeNameFormat == TypeNameFormat.wellKnown) {
-                  if (record.type.length >= 1 && record.type[0] == 0x55) {
-                    // URI record (0x55 is the prefix code for URI)
-                    final uriBytes = record.payload;
-                    if (uriBytes.isNotEmpty) {
-                      final uriString = String.fromCharCodes(uriBytes.skip(1));
-                      scannedData = uriString;
-                      debugPrint('Extracted URI: $scannedData');
-                    }
-                  } else {
-                    // Text record or other well-known type
-                    scannedData = String.fromCharCodes(record.payload);
-                    debugPrint('Extracted text: $scannedData');
-                  }
-                } else if (record.typeNameFormat == TypeNameFormat.absoluteUri) {
-                  // Absolute URI
-                  scannedData = String.fromCharCodes(record.payload);
-                  debugPrint('Extracted absolute URI: $scannedData');
-                } else {
-                  // Other types - try to decode as string
-                  scannedData = String.fromCharCodes(record.payload);
-                  debugPrint('Extracted other type: $scannedData');
-                }
+                scannedData = decodeNdefRecord(record);
+                debugPrint('Decoded NDEF data: ${scannedData ?? "null"}');
               } else {
                 debugPrint('Tag detected but has no NDEF data (empty/unformatted tag)');
                 // This is OK - tag is detected but empty
@@ -299,6 +396,8 @@ class NFCService {
     String? category,
   }) async {
     try {
+      await stopExistingSession(reason: 'before starting write session');
+
       final availability = await NfcManager.instance.checkAvailability();
       final isAvailable = availability == NfcAvailability.enabled;
       if (!isAvailable) {
@@ -353,13 +452,13 @@ class NFCService {
             }
 
             // Check if tag supports NDEF
-            // Ndef is platform-specific
-            android.NdefAndroid? ndefAndroid;
-            ios.NdefIos? ndefIos;
+            NdefAndroid? ndefAndroid;
+            NdefIos? ndefIos;
             try {
-              ndefAndroid = android.NdefAndroid.from(tag);
-              if (ndefAndroid == null) {
-                ndefIos = ios.NdefIos.from(tag);
+              if (defaultTargetPlatform == TargetPlatform.android) {
+                ndefAndroid = NdefAndroid.from(tag);
+              } else if (defaultTargetPlatform == TargetPlatform.iOS) {
+                ndefIos = NdefIos.from(tag);
               }
             } catch (e) {
               debugPrint('Error getting Ndef: $e');
@@ -592,12 +691,13 @@ class NFCService {
         }
 
         // Check if tag supports NDEF and is writable
-        android.NdefAndroid? ndefAndroid;
-        ios.NdefIos? ndefIos;
+        NdefAndroid? ndefAndroid;
+        NdefIos? ndefIos;
         try {
-          ndefAndroid = android.NdefAndroid.from(tag);
-          if (ndefAndroid == null) {
-            ndefIos = ios.NdefIos.from(tag);
+          if (defaultTargetPlatform == TargetPlatform.android) {
+            ndefAndroid = NdefAndroid.from(tag);
+          } else if (defaultTargetPlatform == TargetPlatform.iOS) {
+            ndefIos = NdefIos.from(tag);
           }
         } catch (e) {
           debugPrint('Error getting Ndef for details: $e');
@@ -639,4 +739,3 @@ class NFCService {
     }
   }
 }
-

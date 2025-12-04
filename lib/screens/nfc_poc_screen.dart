@@ -243,7 +243,7 @@ class _NFCPOCScreenState extends State<NFCPOCScreen> {
                 labelText: 'Title/Category (Optional)',
                 hintText: 'Enter a title or category',
                 border: OutlineInputBorder(),
-                helperText: 'This will be associated with the NFC tag',
+                helperText: 'This title will be associated with the NFC tag',
               ),
               textInputAction: TextInputAction.next,
               onSubmitted: (_) {

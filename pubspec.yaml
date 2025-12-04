@@ -61,6 +61,7 @@ dependencies:
 
   # NFC tag reading and writing
   nfc_manager: ^4.1.1
+  ndef_record: ^1.3.3
 
   # Liquid glass theme components
   cupertino_native_better: ^1.1.9

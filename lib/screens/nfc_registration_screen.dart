@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:nfc_manager/nfc_manager.dart';
 import 'package:nfc_manager/src/nfc_manager_android/tags/ndef.dart' as android;
@@ -73,6 +73,8 @@ class _NFCRegistrationScreenState extends State<NFCRegistrationScreen> {
     _sessionTimeoutTimer?.cancel();
 
     try {
+      await NFCService.stopExistingSession(reason: 'registration_start');
+
       final isAvailable = await NFCService.isNFCAvailable();
       if (!isAvailable) {
         if (mounted) {
@@ -145,8 +147,9 @@ class _NFCRegistrationScreenState extends State<NFCRegistrationScreen> {
             android.NdefAndroid? ndefAndroid;
             ios.NdefIos? ndefIos;
             try {
-              ndefAndroid = android.NdefAndroid.from(tag);
-              if (ndefAndroid == null) {
+              if (defaultTargetPlatform == TargetPlatform.android) {
+                ndefAndroid = android.NdefAndroid.from(tag);
+              } else if (defaultTargetPlatform == TargetPlatform.iOS) {
                 ndefIos = ios.NdefIos.from(tag);
               }
             } catch (e) {
@@ -540,4 +543,3 @@ class _NFCRegistrationScreenState extends State<NFCRegistrationScreen> {
     );
   }
 }
-
