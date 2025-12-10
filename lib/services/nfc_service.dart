@@ -143,12 +143,8 @@ class NFCService {
 
   /// Stop any existing NFC session safely
   static Future<void> stopSession({String? alertMessage}) async {
-    if (!_sessionActive) {
-      debugPrint('[NFC] No active session to stop');
-      return;
-    }
-
     try {
+      // Always try to stop, even if we think there's no active session
       if (defaultTargetPlatform == TargetPlatform.iOS) {
         await NfcManager.instance.stopSession(
           alertMessageIos: alertMessage,
@@ -156,10 +152,10 @@ class NFCService {
       } else {
         await NfcManager.instance.stopSession();
       }
-      _sessionActive = false;
       debugPrint('[NFC] Session stopped successfully');
     } catch (e) {
-      debugPrint('[NFC] Error stopping session: $e');
+      debugPrint('[NFC] Error stopping session (may already be stopped): $e');
+    } finally {
       _sessionActive = false;
     }
   }
@@ -231,15 +227,16 @@ class NFCService {
       // Start NFC session
       _sessionActive = true;
 
+      debugPrint('[NFC] Starting session with simplified polling...');
+
       await NfcManager.instance.startSession(
-        // Polling options - support all common tag types
+        // Use just iso14443 - most common for NTAG tags
         pollingOptions: {
           NfcPollingOption.iso14443,
-          NfcPollingOption.iso15693,
         },
         // iOS specific settings
-        alertMessageIos: 'Ready to Scan - Hold iPhone near NFC tag',
-        invalidateAfterFirstReadIos: false, // Changed to false to keep session open
+        alertMessageIos: 'Hold your iPhone near the NFC tag',
+        invalidateAfterFirstReadIos: true,
 
         // Error handler for iOS
         onSessionErrorIos: (error) {
@@ -269,7 +266,9 @@ class NFCService {
 
         // Tag discovered handler
         onDiscovered: (NfcTag tag) async {
-          debugPrint('[NFC] ✓ Tag discovered!');
+          debugPrint('[NFC] ========================================');
+          debugPrint('[NFC] ✓✓✓ TAG DISCOVERED CALLBACK FIRED! ✓✓✓');
+          debugPrint('[NFC] ========================================');
 
           try {
             // Extract tag ID
