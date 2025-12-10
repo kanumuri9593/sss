@@ -92,15 +92,13 @@ class _NFCWriteScreenState extends State<NFCWriteScreen> {
       final dataToWrite = _buildDataToWrite();
       debugPrint('Writing data to NFC tag: $dataToWrite');
 
-      final success = await NFCService.writeNFCTag(
+      final result = await NFCService.writeNFCTag(
         data: dataToWrite,
         tagId: widget.tagId,
-        category: _categoryController.text.trim().isEmpty
-            ? null
-            : _categoryController.text.trim(),
       );
 
       if (mounted) {
+        final success = result['success'] as bool? ?? false;
         if (success) {
           setState(() {
             _successMessage = 'Data written successfully!';
@@ -113,8 +111,9 @@ class _NFCWriteScreenState extends State<NFCWriteScreen> {
             Navigator.pop(context, true); // Return true to indicate success
           }
         } else {
+          final errorMsg = result['error'] as String? ?? 'Unknown error';
           setState(() {
-            _errorMessage = 'Failed to write data to tag. Please try again.';
+            _errorMessage = 'Failed to write data to tag: $errorMsg';
             _isWriting = false;
           });
         }

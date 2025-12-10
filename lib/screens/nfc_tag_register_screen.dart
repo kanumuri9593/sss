@@ -118,12 +118,13 @@ class _NFCTagRegisterScreenState extends State<NFCTagRegisterScreen> {
       debugPrint('Writing registration data to NFC tag: ${dataToWrite.length} characters');
 
       // Write to tag
-      final success = await NFCService.writeNFCTag(
+      final result = await NFCService.writeNFCTag(
         data: dataToWrite,
         tagId: widget.tagId,
       );
 
       if (mounted) {
+        final success = result['success'] as bool? ?? false;
         if (success) {
           setState(() {
             _successMessage = widget.isEdit
@@ -135,11 +136,13 @@ class _NFCTagRegisterScreenState extends State<NFCTagRegisterScreen> {
           // Wait a moment to show success message
           await Future.delayed(const Duration(seconds: 2));
           if (mounted) {
-            Navigator.pop(context, true);
+            // Return the data that was written
+            Navigator.pop(context, dataToWrite);
           }
         } else {
+          final errorMsg = result['error'] as String? ?? 'Unknown error';
           setState(() {
-            _errorMessage = 'Failed to write to tag. Please try again.';
+            _errorMessage = 'Failed to write to tag: $errorMsg';
             _isWriting = false;
           });
         }

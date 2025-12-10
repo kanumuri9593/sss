@@ -1,4 +1,6 @@
 import 'package:flutter/foundation.dart';
+import 'dart:async';
+import 'dart:typed_data';
 import 'package:nfc_manager/nfc_manager.dart';
 import 'package:nfc_manager/nfc_manager_android.dart';
 import 'package:nfc_manager/nfc_manager_ios.dart';
@@ -7,135 +9,526 @@ import '../models/nfc_tag_data.dart';
 import '../models/nfc_tag_details.dart';
 
 /// NFC Service for reading, writing, and managing NFC tags.
+/// Optimized for iOS and Android compatibility.
 class NFCService {
   /// In-memory registry of NFCTagData by id for this POC.
-  ///
-  /// In a production system this would be backed by a database or API.
   static final Map<String, NFCTagData> _nfcRegistry = <String, NFCTagData>{};
-
-  /// Registry by tag ID (physical NFC tag identifier)
   static final Map<String, String> _tagIdToDataId = <String, String>{};
 
+  /// Track active NFC session state
+  static bool _sessionActive = false;
+
+  /// Check if NFC is available on the device.
+  static Future<bool> isNFCAvailable() async {
+    try {
+      final status = await NfcManager.instance.checkAvailability();
+      final result = status == NfcAvailability.enabled;
+      debugPrint('[NFC] Device availability check: $result (status: $status)');
+      return result;
+    } catch (e) {
+      debugPrint('[NFC] Error checking NFC availability: $e');
+      return false;
+    }
+  }
+
+  /// Get detailed NFC availability status
+  static Future<NfcAvailability> getNFCAvailabilityStatus() async {
+    try {
+      final status = await NfcManager.instance.checkAvailability();
+      debugPrint('[NFC] Availability status: $status');
+      return status;
+    } catch (e) {
+      debugPrint('[NFC] Error getting NFC status: $e');
+      return NfcAvailability.unsupported;
+    }
+  }
+
   /// Check if an error indicates an empty/unformatted NDEF tag.
-  /// 
-  /// This is a normal case and should be handled gracefully.
-  /// iOS returns error code 403 with message "NDEF tag does not contain any NDEF message"
-  /// Error format: "Error Domain=NFCError Code=403 "NDEF tag does not contain any NDEF message""
   static bool isEmptyNdefError(dynamic error) {
-    // Convert error to string for analysis
-    final errorString = error.toString();
-    final lowerError = errorString.toLowerCase();
-    
-    // Primary check: iOS error code 403 (empty NDEF tag)
-    // Pattern: "Code=403" or "Code: 403" or just "403" with NDEF context
-    if (errorString.contains('403') || lowerError.contains('code=403') || lowerError.contains('code: 403')) {
-      // If it's error 403, it's almost certainly an empty NDEF tag
-      // But verify it's NDEF-related to be safe
-      if (lowerError.contains('ndef') || 
-          lowerError.contains('message') || 
-          lowerError.contains('nfc')) {
+    final errorString = error.toString().toLowerCase();
+
+    // iOS error code 403 = empty NDEF tag (has NDEF format but no data)
+    if (errorString.contains('403') || errorString.contains('code=403')) {
+      return true;
+    }
+
+    // iOS error code 102 = tag not NDEF formatted at all
+    if (errorString.contains('102') || errorString.contains('code=102')) {
+      return true;
+    }
+
+    // iOS often says "session invalidated unexpectedly" for empty tags
+    if (errorString.contains('session invalidated unexpectedly')) {
+      return true;
+    }
+
+    // Check for "not formatted" patterns
+    if (errorString.contains('not') && errorString.contains('formatted')) {
+      return true;
+    }
+
+    // Check for empty message patterns
+    if (errorString.contains('ndef')) {
+      if ((errorString.contains('does not contain') && errorString.contains('message')) ||
+          errorString.contains('no ndef') ||
+          errorString.contains('empty')) {
         return true;
       }
     }
-    
-    // Secondary check: Empty NDEF message patterns
-    // Common patterns:
-    // - "NDEF tag does not contain any NDEF message"
-    // - "no NDEF message"
-    // - "NDEF tag is empty"
-    if (lowerError.contains('ndef')) {
-      if (lowerError.contains('does not contain') && 
-          (lowerError.contains('message') || lowerError.contains('ndef'))) {
-        return true;
-      }
-      if (lowerError.contains('no ndef') || 
-          lowerError.contains('ndef') && lowerError.contains('empty')) {
-        return true;
-      }
-      if (lowerError.contains('message') && 
-          (lowerError.contains('not') || lowerError.contains('empty'))) {
-        return true;
-      }
-    }
-    
+
     return false;
   }
 
   /// Decode a single NDEF record to a readable string.
-  static String? decodeNdefRecord(NdefRecord record) {
-    // URI prefix map from NFC Forum "URI Record Type Definition"
-    const uriPrefixes = [
-      '',
-      'http://www.',
-      'https://www.',
-      'http://',
-      'https://',
-      'tel:',
-      'mailto:',
-      'ftp://anonymous:anonymous@',
-      'ftp://ftp.',
-      'ftps://',
-      'sftp://',
-      'smb://',
-      'nfs://',
-      'ftp://',
-      'dav://',
-      'news:',
-      'telnet://',
-      'imap:',
-      'rtsp://',
-      'urn:',
-      'pop:',
-      'sip:',
-      'sips:',
-      'tftp:',
-      'btspp://',
-      'btl2cap://',
-      'btgoep://',
-      'tcpobex://',
-      'irdaobex://',
-      'file://',
-      'urn:epc:id:',
-      'urn:epc:tag:',
-      'urn:epc:pat:',
-      'urn:epc:raw:',
-      'urn:epc:',
-      'urn:nfc:',
-    ];
-
-    if (record.typeNameFormat == TypeNameFormat.wellKnown) {
-      // URI record (type 0x55)
-      if (record.type.isNotEmpty && record.type[0] == 0x55) {
-        if (record.payload.isEmpty) return null;
-        final prefixCode = record.payload[0];
-        final prefix = prefixCode < uriPrefixes.length ? uriPrefixes[prefixCode] : '';
-        final uriBody = String.fromCharCodes(record.payload.skip(1));
-        return '$prefix$uriBody';
-      }
-
-      // Text record (type 0x54)
-      if (record.type.isNotEmpty && record.type[0] == 0x54) {
-        if (record.payload.isEmpty) return null;
-        final statusByte = record.payload[0];
-        final languageCodeLength = statusByte & 0x3F; // lower 6 bits
-        final isUtf16 = (statusByte & 0x80) != 0;
-        final textBytes = record.payload.skip(1 + languageCodeLength);
-        if (isUtf16) {
-          return String.fromCharCodes(textBytes);
-        }
-        return String.fromCharCodes(textBytes);
-      }
-    }
-
-    // Absolute URI or any other type -> try to decode payload as string
+  static String? decodeNdefRecord(dynamic record) {
     try {
-      return String.fromCharCodes(record.payload);
-    } catch (_) {
+      // URI prefix map from NFC Forum specification
+      const uriPrefixes = [
+        '', 'http://www.', 'https://www.', 'http://', 'https://',
+        'tel:', 'mailto:', 'ftp://anonymous:anonymous@', 'ftp://ftp.',
+        'ftps://', 'sftp://', 'smb://', 'nfs://', 'ftp://', 'dav://',
+        'news:', 'telnet://', 'imap:', 'rtsp://', 'urn:', 'pop:',
+        'sip:', 'sips:', 'tftp:', 'btspp://', 'btl2cap://', 'btgoep://',
+        'tcpobex://', 'irdaobex://', 'file://', 'urn:epc:id:',
+        'urn:epc:tag:', 'urn:epc:pat:', 'urn:epc:raw:', 'urn:epc:', 'urn:nfc:',
+      ];
+
+      // Get record properties safely
+      final tnf = record.typeNameFormat;
+      final type = record.type as List<int>?;
+      final payload = record.payload as List<int>?;
+
+      if (payload == null || payload.isEmpty) {
+        debugPrint('[NFC] Empty payload in record');
+        return null;
+      }
+
+      // Well-known type
+      if (tnf == TypeNameFormat.wellKnown && type != null && type.isNotEmpty) {
+        // URI record (0x55 = 'U')
+        if (type[0] == 0x55) {
+          final prefixCode = payload[0];
+          final prefix = prefixCode < uriPrefixes.length ? uriPrefixes[prefixCode] : '';
+          final uriBody = String.fromCharCodes(payload.skip(1));
+          final fullUri = '$prefix$uriBody';
+          debugPrint('[NFC] Decoded URI: $fullUri');
+          return fullUri;
+        }
+
+        // Text record (0x54 = 'T')
+        if (type[0] == 0x54) {
+          final statusByte = payload[0];
+          final languageCodeLength = statusByte & 0x3F;
+          final textBytes = payload.skip(1 + languageCodeLength);
+          final text = String.fromCharCodes(textBytes);
+          debugPrint('[NFC] Decoded text: $text');
+          return text;
+        }
+      }
+
+      // Try to decode as string
+      try {
+        final decoded = String.fromCharCodes(payload);
+        debugPrint('[NFC] Decoded as raw string: $decoded');
+        return decoded;
+      } catch (e) {
+        debugPrint('[NFC] Failed to decode payload: $e');
+        return null;
+      }
+    } catch (e) {
+      debugPrint('[NFC] Error decoding record: $e');
       return null;
     }
   }
 
-  /// Register an NFC entry in the in-memory registry.
+  /// Stop any existing NFC session safely
+  static Future<void> stopSession({String? alertMessage}) async {
+    if (!_sessionActive) {
+      debugPrint('[NFC] No active session to stop');
+      return;
+    }
+
+    try {
+      if (defaultTargetPlatform == TargetPlatform.iOS) {
+        await NfcManager.instance.stopSession(
+          alertMessageIos: alertMessage,
+        );
+      } else {
+        await NfcManager.instance.stopSession();
+      }
+      _sessionActive = false;
+      debugPrint('[NFC] Session stopped successfully');
+    } catch (e) {
+      debugPrint('[NFC] Error stopping session: $e');
+      _sessionActive = false;
+    }
+  }
+
+  /// Extract tag ID from NFC tag data
+  static String? extractTagId(NfcTag tag) {
+    try {
+      // ignore: invalid_use_of_protected_member
+      final tagData = tag.data;
+
+      if (tagData is! Map) {
+        debugPrint('[NFC] Tag data is not a Map');
+        return null;
+      }
+
+      // Try different tag technologies
+      final technologies = ['nfca', 'nfcb', 'nfcf', 'nfcv', 'iso15693', 'mifareClassic', 'mifareUltralight'];
+
+      for (final tech in technologies) {
+        final techData = tagData[tech];
+        if (techData is Map) {
+          final identifier = techData['identifier'] ?? techData['id'];
+          if (identifier != null && identifier is List) {
+            final tagId = identifier
+                .map((e) => (e as int).toRadixString(16).padLeft(2, '0').toUpperCase())
+                .join(':');
+            debugPrint('[NFC] Extracted tag ID ($tech): $tagId');
+            return tagId;
+          }
+        }
+      }
+
+      debugPrint('[NFC] Could not extract tag ID from any technology');
+      return null;
+    } catch (e) {
+      debugPrint('[NFC] Error extracting tag ID: $e');
+      return null;
+    }
+  }
+
+  /// Read NFC tag - iOS and Android compatible
+  static Future<Map<String, dynamic>?> readNFCTag() async {
+    debugPrint('[NFC] ========== Starting NFC Read Session ==========');
+
+    try {
+      // Stop any existing session first
+      await stopSession();
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      // Check availability
+      final isAvailable = await isNFCAvailable();
+      if (!isAvailable) {
+        debugPrint('[NFC] NFC is not available on this device');
+        return {'error': 'NFC not available'};
+      }
+
+      // Check detailed status
+      final status = await getNFCAvailabilityStatus();
+      if (status != NfcAvailability.enabled) {
+        debugPrint('[NFC] NFC status: $status (not enabled)');
+        return {'error': 'NFC is not enabled. Please enable NFC in Settings.'};
+      }
+
+      debugPrint('[NFC] NFC is available and enabled');
+
+      // Use Completer instead of while loop to avoid blocking
+      final completer = Completer<Map<String, dynamic>>();
+
+      // Start NFC session
+      _sessionActive = true;
+
+      await NfcManager.instance.startSession(
+        // Polling options - support all common tag types
+        pollingOptions: {
+          NfcPollingOption.iso14443,
+          NfcPollingOption.iso15693,
+        },
+        // iOS specific settings
+        alertMessageIos: 'Ready to Scan - Hold iPhone near NFC tag',
+        invalidateAfterFirstReadIos: false, // Changed to false to keep session open
+
+        // Error handler for iOS
+        onSessionErrorIos: (error) {
+          debugPrint('[NFC][iOS] Session error: ${error.message}');
+
+          if (isEmptyNdefError(error) || isEmptyNdefError(error.message)) {
+            debugPrint('[NFC][iOS] Detected empty tag (this is normal)');
+            if (!completer.isCompleted) {
+              completer.complete({
+                'isEmpty': true,
+                'tagId': null,
+                'data': null,
+                'message': 'Empty tag detected',
+              });
+            }
+          } else {
+            debugPrint('[NFC][iOS] Real error: ${error.message}');
+            if (!completer.isCompleted) {
+              completer.complete({
+                'error': 'NFC Error: ${error.message}',
+              });
+            }
+          }
+
+          _sessionActive = false;
+        },
+
+        // Tag discovered handler
+        onDiscovered: (NfcTag tag) async {
+          debugPrint('[NFC] ✓ Tag discovered!');
+
+          try {
+            // Extract tag ID
+            final tagId = extractTagId(tag);
+            debugPrint('[NFC] Tag ID: ${tagId ?? "unknown"}');
+
+            // Try to read NDEF data
+            String? ndefData;
+            bool isEmpty = false;
+
+            try {
+              // Get NDEF handler based on platform
+              if (defaultTargetPlatform == TargetPlatform.iOS) {
+                final ndef = NdefIos.from(tag);
+                if (ndef != null) {
+                  debugPrint('[NFC][iOS] NDEF handler obtained');
+
+                  // Try cached message first
+                  var ndefMessage = ndef.cachedNdefMessage;
+
+                  // If no cached message, read from tag
+                  if (ndefMessage == null) {
+                    debugPrint('[NFC][iOS] Reading NDEF from tag...');
+                    try {
+                      ndefMessage = await ndef.readNdef();
+                    } catch (e) {
+                      if (isEmptyNdefError(e)) {
+                        debugPrint('[NFC][iOS] Tag is empty (no NDEF data)');
+                        isEmpty = true;
+                      } else {
+                        debugPrint('[NFC][iOS] Error reading NDEF: $e');
+                      }
+                    }
+                  }
+
+                  if (ndefMessage != null && ndefMessage.records.isNotEmpty) {
+                    debugPrint('[NFC][iOS] Found ${ndefMessage.records.length} NDEF records');
+                    ndefData = decodeNdefRecord(ndefMessage.records.first);
+                  } else {
+                    isEmpty = true;
+                  }
+                }
+              } else if (defaultTargetPlatform == TargetPlatform.android) {
+                final ndef = NdefAndroid.from(tag);
+                if (ndef != null) {
+                  debugPrint('[NFC][Android] NDEF handler obtained');
+
+                  final ndefMessage = await ndef.getNdefMessage();
+                  if (ndefMessage != null && ndefMessage.records.isNotEmpty) {
+                    debugPrint('[NFC][Android] Found ${ndefMessage.records.length} NDEF records');
+                    ndefData = decodeNdefRecord(ndefMessage.records.first);
+                  } else {
+                    isEmpty = true;
+                  }
+                } else {
+                  debugPrint('[NFC][Android] Tag does not support NDEF');
+                  isEmpty = true;
+                }
+              }
+            } catch (e) {
+              debugPrint('[NFC] Error reading NDEF: $e');
+              if (isEmptyNdefError(e)) {
+                isEmpty = true;
+              }
+            }
+
+            // Build result
+            final result = {
+              'tagId': tagId ?? 'unknown',
+              'data': ndefData,
+              'isEmpty': isEmpty || ndefData == null,
+              'type': 'NFC Tag',
+            };
+
+            debugPrint('[NFC] Read complete - Data: ${ndefData ?? "empty"}, Tag ID: ${tagId ?? "unknown"}');
+
+            // Stop session with success message
+            await stopSession(
+              alertMessage: ndefData != null ? 'Tag read successfully!' : 'Empty tag detected',
+            );
+
+            if (!completer.isCompleted) {
+              completer.complete(result);
+            }
+
+          } catch (e, stackTrace) {
+            debugPrint('[NFC] Error processing tag: $e');
+            debugPrint('[NFC] Stack trace: $stackTrace');
+
+            await stopSession(alertMessage: 'Failed to read tag');
+
+            if (!completer.isCompleted) {
+              completer.complete({'error': 'Error reading tag: $e'});
+            }
+          }
+        },
+      );
+
+      debugPrint('[NFC] Session started, waiting for tag...');
+
+      // Wait for result with timeout
+      final result = await completer.future.timeout(
+        const Duration(seconds: 60),
+        onTimeout: () {
+          debugPrint('[NFC] Session timeout');
+          stopSession(alertMessage: 'Session timed out');
+          return {'error': 'Session timed out'};
+        },
+      );
+
+      debugPrint('[NFC] ========== Read Session Complete ==========');
+      return result;
+
+    } catch (e, stackTrace) {
+      debugPrint('[NFC] Fatal error in read session: $e');
+      debugPrint('[NFC] Stack trace: $stackTrace');
+      await stopSession(alertMessage: 'Error occurred');
+      return {'error': 'Failed to start NFC session: $e'};
+    }
+  }
+
+  /// Write data to NFC tag
+  static Future<Map<String, dynamic>> writeNFCTag({
+    required String data,
+    String? tagId,
+  }) async {
+    debugPrint('[NFC] ========== Starting NFC Write Session ==========');
+    debugPrint('[NFC] Data to write: $data');
+
+    try {
+      // Stop any existing session
+      await stopSession();
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      // Check availability
+      final isAvailable = await isNFCAvailable();
+      if (!isAvailable) {
+        return {'success': false, 'error': 'NFC not available'};
+      }
+
+      final status = await getNFCAvailabilityStatus();
+      if (status != NfcAvailability.enabled) {
+        return {'success': false, 'error': 'NFC is not enabled'};
+      }
+
+      final completer = Completer<Map<String, dynamic>>();
+
+      _sessionActive = true;
+
+      await NfcManager.instance.startSession(
+        pollingOptions: {
+          NfcPollingOption.iso14443,
+          NfcPollingOption.iso15693,
+        },
+        alertMessageIos: 'Hold your iPhone near the NFC tag to write',
+        invalidateAfterFirstReadIos: true,
+
+        onSessionErrorIos: (error) {
+          debugPrint('[NFC][iOS] Write session error: ${error.message}');
+          if (!completer.isCompleted) {
+            completer.complete({'success': false, 'error': error.message});
+          }
+          _sessionActive = false;
+        },
+
+        onDiscovered: (NfcTag tag) async {
+          debugPrint('[NFC] Tag discovered for writing');
+
+          try {
+            final actualTagId = extractTagId(tag);
+            debugPrint('[NFC] Writing to tag: ${actualTagId ?? "unknown"}');
+
+            // Create NDEF message
+            final payload = Uint8List.fromList([0x00, ...data.codeUnits]);
+            final record = NdefRecord(
+              typeNameFormat: TypeNameFormat.wellKnown,
+              type: Uint8List.fromList([0x55]), // URI record
+              identifier: Uint8List(0),
+              payload: payload,
+            );
+
+            final message = NdefMessage(records: [record]);
+
+            // Write based on platform
+            bool writeSuccess = false;
+
+            if (defaultTargetPlatform == TargetPlatform.iOS) {
+              final ndef = NdefIos.from(tag);
+              if (ndef != null) {
+                await ndef.writeNdef(message);
+                writeSuccess = true;
+                debugPrint('[NFC][iOS] Write successful');
+              } else {
+                debugPrint('[NFC][iOS] Tag does not support NDEF writing');
+              }
+            } else if (defaultTargetPlatform == TargetPlatform.android) {
+              final ndef = NdefAndroid.from(tag);
+              if (ndef != null) {
+                if (ndef.isWritable) {
+                  await ndef.writeNdefMessage(message);
+                  writeSuccess = true;
+                  debugPrint('[NFC][Android] Write successful');
+                } else {
+                  debugPrint('[NFC][Android] Tag is not writable');
+                }
+              } else {
+                debugPrint('[NFC][Android] Tag does not support NDEF');
+              }
+            }
+
+            final result = {
+              'success': writeSuccess,
+              'tagId': actualTagId,
+              'message': writeSuccess ? 'Write successful' : 'Write failed',
+            };
+
+            await stopSession(
+              alertMessage: writeSuccess ? 'Tag written successfully!' : 'Write failed',
+            );
+
+            if (!completer.isCompleted) {
+              completer.complete(result);
+            }
+
+          } catch (e, stackTrace) {
+            debugPrint('[NFC] Error writing tag: $e');
+            debugPrint('[NFC] Stack trace: $stackTrace');
+
+            await stopSession(alertMessage: 'Write failed');
+
+            if (!completer.isCompleted) {
+              completer.complete({'success': false, 'error': 'Write error: $e'});
+            }
+          }
+        },
+      );
+
+      // Wait for result with timeout
+      final result = await completer.future.timeout(
+        const Duration(seconds: 60),
+        onTimeout: () {
+          debugPrint('[NFC] Write timeout');
+          stopSession(alertMessage: 'Write timeout');
+          return {'success': false, 'error': 'Write timeout'};
+        },
+      );
+
+      debugPrint('[NFC] ========== Write Session Complete ==========');
+      return result;
+
+    } catch (e, stackTrace) {
+      debugPrint('[NFC] Fatal error in write session: $e');
+      debugPrint('[NFC] Stack trace: $stackTrace');
+      await stopSession();
+      return {'success': false, 'error': 'Failed to write: $e'};
+    }
+  }
+
+  // Registry methods
   static void registerNFCTagData(NFCTagData nfcData) {
     _nfcRegistry[nfcData.id] = nfcData;
     if (nfcData.tagId != null) {
@@ -143,49 +536,20 @@ class NFCService {
     }
   }
 
-  /// Look up NFC data by id from the registry.
   static NFCTagData? getNFCTagDataById(String id) {
     return _nfcRegistry[id];
   }
 
-  /// Look up NFC data by tag ID (physical tag identifier).
   static NFCTagData? getNFCTagDataByTagId(String tagId) {
     final dataId = _tagIdToDataId[tagId];
     if (dataId == null) return null;
     return _nfcRegistry[dataId];
   }
 
-  /// Get all registered NFC tags.
   static List<NFCTagData> getAllRegisteredTags() {
     return _nfcRegistry.values.toList();
   }
 
-  /// Check if NFC is available on the device.
-  static Future<bool> isNFCAvailable() async {
-    try {
-      final result = await NfcManager.instance.checkAvailability();
-      debugPrint('NFC Availability Status: $result');
-      // On iOS, NFC can be enabled, disabled, or unsupported
-      // We return true only if it's enabled
-      final isAvailable = result == NfcAvailability.enabled;
-      if (!isAvailable) {
-        debugPrint('NFC Status: $result (enabled=${NfcAvailability.enabled})');
-        if (result == NfcAvailability.disabled) {
-          debugPrint('NFC is disabled. Please enable NFC in Settings > General > NFC.');
-        } else if (result == NfcAvailability.unsupported) {
-          debugPrint('NFC is not supported on this device.');
-        }
-      }
-      return isAvailable;
-    } catch (e) {
-      debugPrint('Error checking NFC availability: $e');
-      return false;
-    }
-  }
-
-  /// Generate a deep link for a new NFC entry and register it.
-  ///
-  /// The deep link has the format: `sss://qr/<id>` (same as QR codes).
   static String generateDeepLink({
     required String data,
     String? tagId,
@@ -202,539 +566,64 @@ class NFCService {
     return nfcData.buildDeepLink();
   }
 
-  /// Best-effort stop of any active NFC session to avoid "session already exists" errors on iOS.
-  static Future<void> stopExistingSession({String? reason}) async {
-    try {
-      await NfcManager.instance.stopSession();
-      debugPrint('Stopped existing NFC session (${reason ?? "cleanup"}).');
-    } catch (e) {
-      debugPrint('No existing NFC session to stop (${reason ?? "cleanup"}): $e');
-    }
-  }
-
-  /// Read NFC tag and extract data.
-  ///
-  /// Returns the scanned data as a string, or null if reading failed.
-  static Future<Map<String, dynamic>?> readNFCTag() async {
-    try {
-      await stopExistingSession(reason: 'before starting read session');
-
-      final availability = await NfcManager.instance.checkAvailability();
-      final isAvailable = availability == NfcAvailability.enabled;
-      if (!isAvailable) {
-        debugPrint('NFC is not available on this device');
-        return null;
-      }
-
-      String? scannedData;
-      String? tagId;
-      Map<String, dynamic>? tagInfo;
-      bool sessionStopped = false;
-
-      debugPrint('Starting NFC read session...');
-
-      await NfcManager.instance.startSession(
-        pollingOptions: {
-          NfcPollingOption.iso14443,  // NTAG 213 uses ISO14443 Type A
-          NfcPollingOption.iso15693,
-        },
-        onDiscovered: (NfcTag tag) async {
-          debugPrint('NFC tag discovered!');
-          
-          try {
-            // Extract tag ID - use tag identifier if available
-            try {
-              // Try to get identifier from tag data
-              // ignore: invalid_use_of_protected_member
-              final tagData = tag.data;
-              debugPrint('Tag data type: ${tagData.runtimeType}');
-              
-              if (tagData is Map) {
-                // Try different tag types
-                final nfca = tagData['nfca'];
-                final nfcb = tagData['nfcb'];
-                final nfcf = tagData['nfcf'];
-                final nfcv = tagData['nfcv'];
-                
-                debugPrint('Tag types found - nfca: ${nfca != null}, nfcb: ${nfcb != null}, nfcf: ${nfcf != null}, nfcv: ${nfcv != null}');
-                
-                if (nfca is Map && nfca['identifier'] != null) {
-                  tagId = (nfca['identifier'] as List).map((e) => e.toRadixString(16).padLeft(2, '0')).join(':');
-                  debugPrint('Tag ID extracted (NFCA): $tagId');
-                } else if (nfcb is Map && nfcb['identifier'] != null) {
-                  tagId = (nfcb['identifier'] as List).map((e) => e.toRadixString(16).padLeft(2, '0')).join(':');
-                  debugPrint('Tag ID extracted (NFCB): $tagId');
-                } else if (nfcf is Map && nfcf['identifier'] != null) {
-                  tagId = (nfcf['identifier'] as List).map((e) => e.toRadixString(16).padLeft(2, '0')).join(':');
-                  debugPrint('Tag ID extracted (NFCF): $tagId');
-                } else if (nfcv is Map && nfcv['identifier'] != null) {
-                  tagId = (nfcv['identifier'] as List).map((e) => e.toRadixString(16).padLeft(2, '0')).join(':');
-                  debugPrint('Tag ID extracted (NFCV): $tagId');
-                } else {
-                  tagId = 'unknown';
-                  debugPrint('Could not extract tag ID from known types');
-                }
-              } else {
-                tagId = 'unknown';
-                debugPrint('Tag data is not a Map, cannot extract ID');
-              }
-            } catch (e, stackTrace) {
-              debugPrint('Error extracting tag ID: $e');
-              debugPrint('Stack trace: $stackTrace');
-              tagId = 'unknown';
-            }
-
-            // Try to read NDEF records
-            NdefAndroid? ndefAndroid;
-            NdefIos? ndefIos;
-            try {
-              if (defaultTargetPlatform == TargetPlatform.android) {
-                ndefAndroid = NdefAndroid.from(tag);
-              } else if (defaultTargetPlatform == TargetPlatform.iOS) {
-                ndefIos = NdefIos.from(tag);
-              }
-              debugPrint('NDEF handler - Android: ${ndefAndroid != null}, iOS: ${ndefIos != null}');
-            } catch (e) {
-              debugPrint('Error getting Ndef handler: $e');
-            }
-            
-            if (ndefAndroid != null || ndefIos != null) {
-              NdefMessage? ndefMessage;
-              try {
-                if (ndefAndroid != null) {
-                  ndefMessage = await ndefAndroid.getNdefMessage();
-                  debugPrint('NDEF message from Android: ${ndefMessage != null ? "found" : "null"}');
-                } else if (ndefIos != null) {
-                  ndefMessage = ndefIos.cachedNdefMessage ?? await ndefIos.readNdef();
-                  debugPrint('NDEF message from iOS: ${ndefMessage != null ? "found" : "null"}');
-                }
-              } catch (e) {
-                debugPrint('Error reading NDEF message: $e');
-                
-                // Check if this is the "empty NDEF" error (iOS error 403)
-                // This is a normal case for empty/unformatted tags
-                if (isEmptyNdefError(e)) {
-                  debugPrint('Tag is empty/unformatted (no NDEF data) - this is normal');
-                  // This is OK - tag is detected but empty
-                  ndefMessage = null;
-                } else {
-                  debugPrint('Unexpected error reading NDEF: $e');
-                  // Continue anyway - we still have the tag ID
-                  ndefMessage = null;
-                }
-              }
-              
-              if (ndefMessage != null && ndefMessage.records.isNotEmpty) {
-                debugPrint('Found ${ndefMessage.records.length} NDEF record(s)');
-                final record = ndefMessage.records.first;
-                debugPrint('Record type: ${record.typeNameFormat}, type bytes: ${record.type}');
-                
-                scannedData = decodeNdefRecord(record);
-                debugPrint('Decoded NDEF data: ${scannedData ?? "null"}');
-              } else {
-                debugPrint('Tag detected but has no NDEF data (empty/unformatted tag)');
-                // This is OK - tag is detected but empty
-              }
-            } else {
-              debugPrint('Tag does not support NDEF format');
-            }
-
-            // Store tag information - include tag even if empty
-            tagInfo = {
-              'tagId': tagId,
-              'data': scannedData,  // Can be null if tag is empty
-              'type': 'NFC Tag',
-              'isEmpty': scannedData == null,
-            };
-
-            debugPrint('Tag read complete - ID: $tagId, Data: ${scannedData ?? "empty"}');
-
-            await NfcManager.instance.stopSession();
-            sessionStopped = true;
-          } catch (e, stackTrace) {
-            debugPrint('Error reading NFC tag: $e');
-            debugPrint('Stack trace: $stackTrace');
-            
-            if (!sessionStopped) {
-              try {
-                await NfcManager.instance.stopSession();
-                sessionStopped = true;
-              } catch (stopError) {
-                debugPrint('Error stopping session: $stopError');
-              }
-            }
-            
-            // Still return tag info if we got the tag ID
-            if (tagId != null && tagId != 'unknown') {
-              tagInfo = {
-                'tagId': tagId,
-                'data': null,
-                'type': 'NFC Tag',
-                'isEmpty': true,
-                'error': e.toString(),
-              };
-            }
-          }
-        },
-      );
-
-      return tagInfo;
-    } catch (e, stackTrace) {
-      debugPrint('Error starting NFC session: $e');
-      debugPrint('Stack trace: $stackTrace');
-      return null;
-    }
-  }
-
-  /// Write data to NFC tag.
-  ///
-  /// Returns true if write was successful, false otherwise.
-  static Future<bool> writeNFCTag({
-    required String data,
-    String? tagId,
-    String? customIdentifier,
-    String? category,
-  }) async {
-    try {
-      await stopExistingSession(reason: 'before starting write session');
-
-      final availability = await NfcManager.instance.checkAvailability();
-      final isAvailable = availability == NfcAvailability.enabled;
-      if (!isAvailable) {
-        debugPrint('NFC is not available on this device');
-        return false;
-      }
-
-      bool writeSuccess = false;
-      String? actualTagId;
-
-      // Generate deep link for the data
-      final deepLink = generateDeepLink(
-        data: data,
-        tagId: tagId,
-        customIdentifier: customIdentifier,
-        category: category,
-      );
-
-      await NfcManager.instance.startSession(
-        pollingOptions: {
-          NfcPollingOption.iso14443,
-          NfcPollingOption.iso15693,
-        },
-        onDiscovered: (NfcTag tag) async {
-          try {
-            // Extract tag ID - use tag identifier if available
-            try {
-              // ignore: invalid_use_of_protected_member
-              final tagData = tag.data;
-              if (tagData is Map) {
-                final nfca = tagData['nfca'];
-                final nfcb = tagData['nfcb'];
-                final nfcf = tagData['nfcf'];
-                final nfcv = tagData['nfcv'];
-                
-                if (nfca is Map && nfca['identifier'] != null) {
-                  actualTagId = (nfca['identifier'] as List).map((e) => e.toRadixString(16).padLeft(2, '0')).join(':');
-                } else if (nfcb is Map && nfcb['identifier'] != null) {
-                  actualTagId = (nfcb['identifier'] as List).map((e) => e.toRadixString(16).padLeft(2, '0')).join(':');
-                } else if (nfcf is Map && nfcf['identifier'] != null) {
-                  actualTagId = (nfcf['identifier'] as List).map((e) => e.toRadixString(16).padLeft(2, '0')).join(':');
-                } else if (nfcv is Map && nfcv['identifier'] != null) {
-                  actualTagId = (nfcv['identifier'] as List).map((e) => e.toRadixString(16).padLeft(2, '0')).join(':');
-                } else {
-                  actualTagId = 'unknown';
-                }
-              } else {
-                actualTagId = 'unknown';
-              }
-            } catch (e) {
-              actualTagId = 'unknown';
-            }
-
-            // Check if tag supports NDEF
-            NdefAndroid? ndefAndroid;
-            NdefIos? ndefIos;
-            try {
-              if (defaultTargetPlatform == TargetPlatform.android) {
-                ndefAndroid = NdefAndroid.from(tag);
-              } else if (defaultTargetPlatform == TargetPlatform.iOS) {
-                ndefIos = NdefIos.from(tag);
-              }
-            } catch (e) {
-              debugPrint('Error getting Ndef: $e');
-            }
-            
-            if (ndefAndroid == null && ndefIos == null) {
-              await NfcManager.instance.stopSession();
-              return;
-            }
-
-            // Check if tag is writable (Android only)
-            if (ndefAndroid != null && !ndefAndroid.isWritable) {
-              await NfcManager.instance.stopSession();
-              return;
-            }
-
-            // Create NDEF message with deep link
-            // For URI records, payload must start with URI prefix byte
-            // 0x00 = no prefix (absolute URI), since we're writing a full URI (sss://...)
-            final uriBytes = deepLink.codeUnits;
-            final payload = Uint8List(uriBytes.length + 1);
-            payload[0] = 0x00; // URI prefix: 0x00 = no prefix (absolute URI)
-            payload.setRange(1, payload.length, uriBytes);
-            
-            final ndefRecord = NdefRecord(
-              typeNameFormat: TypeNameFormat.wellKnown,
-              type: Uint8List.fromList([0x55]), // URI record type
-              identifier: Uint8List(0),
-              payload: payload,
-            );
-
-            final ndefMessage = NdefMessage(records: [ndefRecord]);
-
-            // Write to tag
-            if (ndefAndroid != null) {
-              await ndefAndroid.writeNdefMessage(ndefMessage);
-            } else if (ndefIos != null) {
-              await ndefIos.writeNdef(ndefMessage);
-            }
-
-            // Update registry with actual tag ID
-            final nfcData = NFCTagData.create(
-              data: data,
-              tagId: actualTagId,
-              customIdentifier: customIdentifier,
-              category: category,
-            );
-            registerNFCTagData(nfcData);
-
-            writeSuccess = true;
-            await NfcManager.instance.stopSession();
-          } catch (e) {
-            debugPrint('Error writing NFC tag: $e');
-            await NfcManager.instance.stopSession();
-            writeSuccess = false;
-          }
-        },
-      );
-
-      return writeSuccess;
-    } catch (e) {
-      debugPrint('Error starting NFC write session: $e');
-      return false;
-    }
-  }
-
-  /// Verify if a scanned NFC tag was created by this system.
   static bool verifySystemNFC(String scannedData) {
-    // First, check if it is one of our deep links.
     if (NFCTagData.isSystemDeepLink(scannedData)) {
       return true;
     }
-
-    // Fallback: support legacy JSON-based payloads.
     return NFCTagData.verifySystemNFC(scannedData);
   }
 
-  /// Extract tag ID from NFC tag.
-  static String? extractTagId(NfcTag tag) {
-    try {
-      // ignore: invalid_use_of_protected_member
-      final tagData = tag.data;
-      if (tagData is Map) {
-        final nfca = tagData['nfca'];
-        final nfcb = tagData['nfcb'];
-        final nfcf = tagData['nfcf'];
-        final nfcv = tagData['nfcv'];
-        
-        if (nfca is Map && nfca['identifier'] != null) {
-          return (nfca['identifier'] as List).map((e) => e.toRadixString(16).padLeft(2, '0')).join(':');
-        } else if (nfcb is Map && nfcb['identifier'] != null) {
-          return (nfcb['identifier'] as List).map((e) => e.toRadixString(16).padLeft(2, '0')).join(':');
-        } else if (nfcf is Map && nfcf['identifier'] != null) {
-          return (nfcf['identifier'] as List).map((e) => e.toRadixString(16).padLeft(2, '0')).join(':');
-        } else if (nfcv is Map && nfcv['identifier'] != null) {
-          return (nfcv['identifier'] as List).map((e) => e.toRadixString(16).padLeft(2, '0')).join(':');
-        }
-      }
-      return null;
-    } catch (e) {
-      debugPrint('Error extracting tag ID: $e');
-      return null;
-    }
-  }
-
-  /// Extract detailed technical information from an NFC tag.
   static NFCTagDetails extractTagDetails(NfcTag tag, {String? scannedData}) {
     try {
       // ignore: invalid_use_of_protected_member
       final tagData = tag.data;
-      
+
+      if (tagData is! Map) {
+        return NFCTagDetails(scannedData: scannedData);
+      }
+
       String? tagType;
       String? tagModel;
-      String? technologiesAvailable;
       String? serialNumber;
-      String? atqa;
       String? sak;
-      bool? protectedByPassword;
-      String? memoryInformation;
-      String? dataFormat;
-      bool? writable;
 
-      if (tagData is Map) {
-        final nfca = tagData['nfca'];
-        final nfcb = tagData['nfcb'];
-        final nfcf = tagData['nfcf'];
-        final nfcv = tagData['nfcv'];
+      // Check NFC-A
+      final nfca = tagData['nfca'];
+      if (nfca is Map) {
+        tagType = 'ISO 14443-3A';
 
-        // Process NFCA (ISO 14443 Type A)
-        if (nfca is Map) {
-          tagType = 'ISO 14443-3A';
-          technologiesAvailable = 'Type A';
-          
-          if (nfca['identifier'] != null) {
-            serialNumber = (nfca['identifier'] as List)
-                .map((e) => e.toRadixString(16).padLeft(2, '0'))
-                .join(':');
-          }
-          
-          if (nfca['atqa'] != null) {
-            final atqaValue = nfca['atqa'];
-            if (atqaValue is List && atqaValue.isNotEmpty) {
-              // ATQA is typically 2 bytes
-              final atqaBytes = atqaValue.map((e) => (e as int).toRadixString(16).padLeft(2, '0')).join('');
-              atqa = '0x${atqaBytes.toUpperCase()}';
-            } else if (atqaValue is int) {
-              atqa = '0x${atqaValue.toRadixString(16).padLeft(4, '0').toUpperCase()}';
-            }
-          }
-          
-          if (nfca['sak'] != null) {
-            final sakValue = nfca['sak'];
-            if (sakValue is int) {
-              sak = '0x${sakValue.toRadixString(16).padLeft(2, '0').toUpperCase()}';
-            }
-          }
-
-          // Try to determine tag model from SAK and other characteristics
-          if (sak != null) {
-            final sakInt = int.tryParse(sak.replaceFirst('0x', ''), radix: 16);
-            if (sakInt != null) {
-              // Common SAK values for NTAG tags
-              if (sakInt == 0x00) {
-                tagModel = 'NXP - NTAG213';
-                memoryInformation = '180 bytes : 45 pages (4 bytes each)';
-                dataFormat = 'NFC Forum Type 2';
-              } else if (sakInt == 0x08) {
-                tagModel = 'NXP - NTAG215';
-                memoryInformation = '504 bytes : 126 pages (4 bytes each)';
-                dataFormat = 'NFC Forum Type 2';
-              } else if (sakInt == 0x10) {
-                tagModel = 'NXP - NTAG216';
-                memoryInformation = '888 bytes : 222 pages (4 bytes each)';
-                dataFormat = 'NFC Forum Type 2';
-              } else {
-                tagModel = 'ISO 14443 Type A';
-              }
-            }
-          }
-
-          // Check if tag is protected by password (NTAG tags)
-          // This is typically indicated by specific memory configurations
-          protectedByPassword = false; // Default, would need additional checks
-        }
-        // Process NFCB (ISO 14443 Type B)
-        else if (nfcb is Map) {
-          tagType = 'ISO 14443-3B';
-          technologiesAvailable = 'Type B';
-          
-          if (nfcb['identifier'] != null) {
-            serialNumber = (nfcb['identifier'] as List)
-                .map((e) => e.toRadixString(16).padLeft(2, '0'))
-                .join(':');
-          }
-          
-          if (nfcb['atqb'] != null) {
-            final atqb = nfcb['atqb'];
-            if (atqb is Map && atqb['applicationData'] != null) {
-              // ATQB contains application data
-              final appData = atqb['applicationData'];
-              if (appData is List) {
-                final atqbBytes = appData.map((e) => (e as int).toRadixString(16).padLeft(2, '0')).join('');
-                atqa = '0x${atqbBytes.toUpperCase()}';
-              }
-            }
-          }
-        }
-        // Process NFCF (FeliCa)
-        else if (nfcf is Map) {
-          tagType = 'FeliCa';
-          technologiesAvailable = 'Type F';
-          
-          if (nfcf['id'] != null) {
-            final id = nfcf['id'];
-            if (id is List) {
-              serialNumber = id.map((e) => e.toRadixString(16).padLeft(2, '0')).join(':');
-            }
-          }
-        }
-        // Process NFCV (ISO 15693)
-        else if (nfcv is Map) {
-          tagType = 'ISO 15693';
-          technologiesAvailable = 'Type V';
-          
-          if (nfcv['identifier'] != null) {
-            serialNumber = (nfcv['identifier'] as List)
-                .map((e) => e.toRadixString(16).padLeft(2, '0'))
-                .join(':');
-          }
+        if (nfca['identifier'] != null) {
+          serialNumber = (nfca['identifier'] as List)
+              .map((e) => (e as int).toRadixString(16).padLeft(2, '0').toUpperCase())
+              .join(':');
         }
 
-        // Check if tag supports NDEF and is writable
-        NdefAndroid? ndefAndroid;
-        NdefIos? ndefIos;
-        try {
-          if (defaultTargetPlatform == TargetPlatform.android) {
-            ndefAndroid = NdefAndroid.from(tag);
-          } else if (defaultTargetPlatform == TargetPlatform.iOS) {
-            ndefIos = NdefIos.from(tag);
-          }
-        } catch (e) {
-          debugPrint('Error getting Ndef for details: $e');
-        }
+        if (nfca['sak'] != null) {
+          final sakValue = nfca['sak'] as int;
+          sak = '0x${sakValue.toRadixString(16).padLeft(2, '0').toUpperCase()}';
 
-        if (ndefAndroid != null) {
-          writable = ndefAndroid.isWritable;
-          if (dataFormat == null) {
-            dataFormat = 'NFC Forum Type 2'; // Most common for Android
+          // Determine tag model from SAK
+          if (sakValue == 0x00) {
+            tagModel = 'NXP - NTAG213';
+          } else if (sakValue == 0x08) {
+            tagModel = 'NXP - NTAG215';
+          } else if (sakValue == 0x10) {
+            tagModel = 'NXP - NTAG216';
+          } else {
+            tagModel = 'ISO 14443 Type A';
           }
-        } else if (ndefIos != null) {
-          // iOS doesn't expose writable status directly
-          writable = null;
-          if (dataFormat == null) {
-            dataFormat = 'NFC Forum Type 2'; // Most common for iOS
-          }
-        } else {
-          writable = false;
         }
       }
 
       return NFCTagDetails(
         tagType: tagType,
         tagModel: tagModel,
-        technologiesAvailable: technologiesAvailable,
         serialNumber: serialNumber,
-        atqa: atqa,
         sak: sak,
-        protectedByPassword: protectedByPassword,
-        memoryInformation: memoryInformation,
-        dataFormat: dataFormat,
-        writable: writable,
         scannedData: scannedData,
       );
-    } catch (e, stackTrace) {
-      debugPrint('Error extracting tag details: $e');
-      debugPrint('Stack trace: $stackTrace');
+    } catch (e) {
+      debugPrint('[NFC] Error extracting tag details: $e');
       return NFCTagDetails(scannedData: scannedData);
     }
   }

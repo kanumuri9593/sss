@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:nfc_manager/nfc_manager.dart';
 import '../models/nfc_tag_data.dart';
 import '../services/nfc_service.dart';
-import 'nfc_reader_screen.dart';
+import 'nfc_simple_screen.dart';
 import 'nfc_registration_screen.dart';
 import 'nfc_detail_screen.dart';
 
@@ -61,7 +61,7 @@ class _NFCPOCScreenState extends State<NFCPOCScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => const NFCReaderScreen(),
+        builder: (context) => const NFCSimpleScreen(),
       ),
     ).then((scannedData) {
       if (scannedData != null && scannedData is Map<String, dynamic>) {

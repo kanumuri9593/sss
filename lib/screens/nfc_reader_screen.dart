@@ -1,18 +1,12 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:nfc_manager/nfc_manager.dart';
-import 'package:nfc_manager/nfc_manager_android.dart';
-import 'package:nfc_manager/nfc_manager_ios.dart';
-import 'package:ndef_record/ndef_record.dart';
 import '../services/nfc_service.dart';
 import '../models/nfc_tag_data.dart';
-import '../models/nfc_tag_details.dart';
 import '../models/nfc_tag_registration.dart';
 import 'nfc_detail_screen.dart';
-import 'nfc_tag_details_screen.dart';
 import 'nfc_tag_register_screen.dart';
 
 /// NFC Reader Screen for scanning NFC tags
+/// Rebuilt for iOS and Android compatibility
 class NFCReaderScreen extends StatefulWidget {
   const NFCReaderScreen({super.key});
 
@@ -27,7 +21,6 @@ class _NFCReaderScreenState extends State<NFCReaderScreen> {
   bool _isProcessing = false;
   bool _isNfcAvailable = false;
   String? _errorMessage;
-  NFCTagDetails? _tagDetails;
   String _statusMessage = 'Ready';
   NFCTagRegistration? _registrationData;
 
@@ -39,299 +32,115 @@ class _NFCReaderScreenState extends State<NFCReaderScreen> {
 
   @override
   void dispose() {
-    // Ensure any lingering NFC session is closed when leaving the screen
-    NFCService.stopExistingSession(reason: 'reader_screen_dispose');
+    NFCService.stopSession();
     super.dispose();
   }
 
   Future<void> _checkNFCAvailability() async {
-    try {
-      final availability = await NfcManager.instance.checkAvailability();
-      debugPrint('NFC Availability: $availability');
+    final isAvailable = await NFCService.isNFCAvailable();
+    final status = await NFCService.getNFCAvailabilityStatus();
 
-      final isAvailable = availability == NfcAvailability.enabled;
+    if (mounted) {
       setState(() {
         _isNfcAvailable = isAvailable;
         if (!isAvailable) {
-          if (availability == NfcAvailability.disabled) {
+          if (status.toString().contains('disabled')) {
             _errorMessage = 'NFC is disabled. Please enable NFC in Settings.';
-          } else if (availability == NfcAvailability.unsupported) {
+          } else {
             _errorMessage = 'NFC is not supported on this device.';
           }
         }
-      });
-      // Don't auto-start reading on init - wait for user to tap button
-      // This prevents iOS session issues and gives user control
-    } catch (e) {
-      debugPrint('Error checking NFC availability: $e');
-      setState(() {
-        _isNfcAvailable = false;
-        _errorMessage = 'Error checking NFC: $e';
       });
     }
   }
 
   Future<void> _startReading() async {
     if (_isProcessing) {
-      debugPrint('Already processing, ignoring request');
+      debugPrint('[UI] Already processing, ignoring request');
       return;
     }
 
-    debugPrint('=== START READING CALLED ===');
+    debugPrint('[UI] ========== Start Reading NFC ==========');
+
     setState(() {
       _isProcessing = true;
       _scannedData = null;
       _tagId = null;
       _isVerified = false;
       _errorMessage = null;
-      _tagDetails = null;
-      _statusMessage = 'Initializing...';
+      _statusMessage = 'Starting NFC session...';
     });
 
     try {
-      await NFCService.stopExistingSession(reason: 'reader_start');
+      // Use the new simplified readNFCTag API
+      final result = await NFCService.readNFCTag();
 
-      debugPrint('Checking NFC availability...');
-      final availability = await NfcManager.instance.checkAvailability();
-      debugPrint('NFC Availability result: $availability');
+      debugPrint('[UI] Read result: $result');
 
-      final isAvailable = availability == NfcAvailability.enabled;
-      if (!isAvailable) {
-        String message;
-        if (availability == NfcAvailability.disabled) {
-          message = 'NFC is disabled. Please enable NFC in Settings.';
-        } else {
-          message = 'NFC is not available on this device';
-        }
-        debugPrint('NFC not available: $message');
+      if (!mounted) return;
+
+      if (result == null) {
         setState(() {
-          _errorMessage = message;
+          _errorMessage = 'Failed to read NFC tag';
           _isProcessing = false;
+          _statusMessage = 'Failed';
         });
         return;
       }
 
-      debugPrint('✓ NFC is available and enabled');
-      debugPrint('Starting NFC session with polling options: ISO14443, ISO15693');
+      // Check for errors
+      if (result.containsKey('error')) {
+        setState(() {
+          _errorMessage = result['error'] as String;
+          _isProcessing = false;
+          _statusMessage = 'Error';
+        });
+        return;
+      }
+
+      // Extract data from result
+      final tagId = result['tagId'] as String?;
+      final data = result['data'] as String?;
+      final isEmpty = result['isEmpty'] as bool? ?? false;
+
+      debugPrint('[UI] Tag ID: $tagId, Data: ${data ?? "empty"}, isEmpty: $isEmpty');
+
+      // Try to parse as registration data
+      NFCTagRegistration? regData;
+      if (data != null) {
+        try {
+          regData = NFCTagRegistration.fromJsonString(data);
+        } catch (e) {
+          debugPrint('[UI] Not a registration format: $e');
+        }
+      }
+
+      // Verify if NFC tag was created by this system
+      bool isVerified = false;
+      if (data != null) {
+        isVerified = NFCService.verifySystemNFC(data) ||
+            NFCTagRegistration.isAppFormat(data);
+      }
 
       setState(() {
-        _statusMessage = 'NFC Session Active - Waiting for tag...';
+        _tagId = tagId;
+        _scannedData = data;
+        _registrationData = regData;
+        _isVerified = isVerified;
+        _isProcessing = false;
+        _statusMessage = data == null ? 'Empty tag detected' : 'Tag read successfully';
+        _errorMessage = null;
       });
 
-      await NfcManager.instance.startSession(
-        pollingOptions: {
-          NfcPollingOption.iso14443,  // NTAG 213 uses ISO14443 Type A
-          NfcPollingOption.iso15693,
-        },
-        alertMessageIos: 'Hold your iPhone near the NFC tag',
-        invalidateAfterFirstReadIos: true,
-        onSessionErrorIos: (error) {
-          debugPrint('❌ NFC Session Error (iOS): ${error.message}');
-          debugPrint('   Error details: ${error.toString()}');
-          
-          // Treat "empty tag" (403) as a normal empty read to avoid surfacing an error banner.
-          // Check both the error object itself and the message string
-          final emptyTag = NFCService.isEmptyNdefError(error) || 
-                          NFCService.isEmptyNdefError(error.message);
-          
-          if (emptyTag) {
-            debugPrint('✓ iOS detected empty/blank NFC tag (error 403 - this is normal)');
-            if (mounted) {
-              setState(() {
-                _statusMessage = 'Empty tag detected';
-                _isProcessing = false;
-                _errorMessage = null;
-                _tagId = 'detected';  // Mark that a tag was detected
-              });
-            }
-            return;
-          }
-          
-          // Real error (not just empty tag)
-          debugPrint('⚠ Real NFC error (not empty tag): ${error.message}');
-          if (mounted) {
-            setState(() {
-              _errorMessage = 'NFC Error: ${error.message}';
-              _isProcessing = false;
-            });
-          }
-        },
-        onDiscovered: (NfcTag tag) async {
-          debugPrint('✓ onDiscovered callback triggered!');
-          bool sessionStopped = false;
-
-          if (mounted) {
-            setState(() {
-              _statusMessage = 'Tag detected! Reading...';
-            });
-          }
-
-          try {
-            debugPrint('========================================');
-            debugPrint('NFC TAG DISCOVERED!');
-            debugPrint('========================================');
-            final tagId = NFCService.extractTagId(tag);
-            debugPrint('Tag ID: $tagId');
-            String? data;
-
-            // Try to read NDEF records
-            NdefAndroid? ndefAndroid;
-            NdefIos? ndefIos;
-            try {
-              if (defaultTargetPlatform == TargetPlatform.android) {
-                ndefAndroid = NdefAndroid.from(tag);
-              } else if (defaultTargetPlatform == TargetPlatform.iOS) {
-                ndefIos = NdefIos.from(tag);
-              }
-            } catch (e) {
-              debugPrint('Error getting NDEF handler: $e');
-            }
-
-            if (ndefAndroid != null || ndefIos != null) {
-              NdefMessage? ndefMessage;
-              try {
-                if (ndefAndroid != null) {
-                  ndefMessage = ndefAndroid.cachedNdefMessage ?? await ndefAndroid.getNdefMessage();
-                } else if (ndefIos != null) {
-                  ndefMessage = ndefIos.cachedNdefMessage ?? await ndefIos.readNdef();
-                }
-                debugPrint('NDEF message: ${ndefMessage != null ? "found (${ndefMessage.records.length} records)" : "null"}');
-              } catch (e) {
-                debugPrint('Error reading NDEF message: $e');
-
-                // Check if this is the "empty NDEF" error (iOS error 403)
-                // This is a normal case for empty/unformatted tags
-                if (NFCService.isEmptyNdefError(e)) {
-                  debugPrint('Tag is empty/unformatted (no NDEF data) - this is normal');
-                  ndefMessage = null;
-                } else {
-                  debugPrint('Unexpected error reading NDEF: $e');
-                  ndefMessage = null;
-                }
-              }
-
-              if (ndefMessage != null && ndefMessage.records.isNotEmpty) {
-                final record = ndefMessage.records.first;
-                debugPrint('Processing NDEF record - TNF: ${record.typeNameFormat}, Type: ${record.type}, Payload length: ${record.payload.length}');
-
-                data = NFCService.decodeNdefRecord(record);
-                debugPrint('Decoded NDEF data: ${data ?? "null"}');
-              } else {
-                debugPrint('Tag detected but has no NDEF data (empty tag)');
-              }
-            } else {
-              debugPrint('Tag does not support NDEF format');
-            }
-
-            if (mounted) {
-              // Extract detailed tag information
-              final tagDetails = NFCService.extractTagDetails(tag, scannedData: data);
-
-              // Try to parse as registration data
-              NFCTagRegistration? regData;
-              if (data != null) {
-                try {
-                  regData = NFCTagRegistration.fromJsonString(data);
-                } catch (e) {
-                  debugPrint('Not a registration format: $e');
-                }
-              }
-
-              setState(() {
-                _tagId = tagId;
-                _scannedData = data;  // Can be null if tag is empty
-                _tagDetails = tagDetails;
-                _registrationData = regData;
-                _isProcessing = false;
-                _statusMessage = data == null ? 'Empty tag detected' : 'Tag read successfully';
-                // Clear error message if tag was detected
-                if (tagId != null && tagId != 'unknown') {
-                  _errorMessage = null;
-                }
-              });
-
-              // Verify if NFC tag was created by this system
-              if (data != null) {
-                final isVerified = NFCService.verifySystemNFC(data) ||
-                                   NFCTagRegistration.isAppFormat(data);
-                setState(() {
-                  _isVerified = isVerified;
-                });
-              }
-
-            }
-
-            await NfcManager.instance.stopSession(
-              alertMessageIos: 'Tag read successfully!',
-            );
-            sessionStopped = true;
-          } catch (e, stackTrace) {
-            debugPrint('Error reading NFC tag: $e');
-            debugPrint('Stack trace: $stackTrace');
-            
-            // Try to extract tag ID even if there was an error
-            String? extractedTagId;
-            try {
-              extractedTagId = NFCService.extractTagId(tag);
-            } catch (_) {
-              // Ignore errors extracting tag ID
-            }
-            
-            // Check if this is an empty NDEF error (normal case)
-            final isEmptyNdef = NFCService.isEmptyNdefError(e);
-            
-            if (!sessionStopped) {
-              try {
-                await NfcManager.instance.stopSession(
-                  alertMessageIos: isEmptyNdef ? 'Empty tag detected' : 'Failed to read tag',
-                );
-                sessionStopped = true;
-              } catch (stopError) {
-                debugPrint('Error stopping session: $stopError');
-              }
-            }
-            
-            if (mounted) {
-              if (isEmptyNdef) {
-                // Empty tag is normal - show it as detected, not as an error
-                debugPrint('✓ Empty tag detected (error 403) - this is normal');
-                setState(() {
-                  _tagId = extractedTagId ?? 'detected';
-                  _scannedData = null;
-                  _errorMessage = null;
-                  _isProcessing = false;
-                  _statusMessage = 'Empty tag detected';
-                  // Extract tag details even for empty tags
-                  try {
-                    _tagDetails = NFCService.extractTagDetails(tag, scannedData: null);
-                  } catch (_) {
-                    // Ignore errors extracting details
-                  }
-                });
-              } else {
-                // Real error
-                setState(() {
-                  _errorMessage = 'Error reading tag: ${e.toString()}';
-                  _isProcessing = false;
-                  // Still try to show tag ID if we got it
-                  if (extractedTagId != null && extractedTagId != 'unknown') {
-                    _tagId = extractedTagId;
-                  }
-                });
-              }
-            }
-          }
-        },
-      );
-      debugPrint('✓ NFC session started successfully (waiting for tag)');
     } catch (e, stackTrace) {
-      debugPrint('❌ Error starting NFC session: $e');
-      debugPrint('Stack trace: $stackTrace');
-      await NFCService.stopExistingSession(reason: 'reader_start_error_cleanup');
+      debugPrint('[UI] Error in read operation: $e');
+      debugPrint('[UI] Stack trace: $stackTrace');
+
       if (mounted) {
         setState(() {
-          _errorMessage = 'Error starting NFC session: $e';
+          _errorMessage = 'Error: $e';
           _isProcessing = false;
+          _statusMessage = 'Error';
         });
       }
     }
@@ -362,6 +171,51 @@ class _NFCReaderScreenState extends State<NFCReaderScreen> {
     }
   }
 
+  Future<void> _writeTagData(String data) async {
+    if (!mounted) return;
+
+    setState(() {
+      _isProcessing = true;
+      _errorMessage = null;
+      _statusMessage = 'Writing to tag...';
+    });
+
+    try {
+      final result = await NFCService.writeNFCTag(data: data, tagId: _tagId);
+
+      debugPrint('[UI] Write result: $result');
+
+      if (!mounted) return;
+
+      final success = result['success'] as bool? ?? false;
+
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Tag written successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        // Re-read the tag to confirm
+        _resumeReading();
+      } else {
+        final error = result['error'] as String? ?? 'Unknown error';
+        setState(() {
+          _errorMessage = 'Write failed: $error';
+          _isProcessing = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('[UI] Error writing tag: $e');
+
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Write error: $e';
+          _isProcessing = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -401,15 +255,8 @@ class _NFCReaderScreenState extends State<NFCReaderScreen> {
                       ),
                       textAlign: TextAlign.center,
                     ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      '📱 NFC Session Active',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.green,
-                      ),
-                    ),
+                    const SizedBox(height: 24),
+                    const Icon(Icons.nfc, size: 64, color: Colors.blue),
                     const SizedBox(height: 16),
                     const Text(
                       'Hold your device near the NFC tag',
@@ -417,21 +264,15 @@ class _NFCReaderScreenState extends State<NFCReaderScreen> {
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                       ),
+                      textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 8),
-                    const Text(
-                      'Position the BACK of your iPhone close to the tag',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Keep it steady for 2-3 seconds',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey,
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 32),
+                      child: Text(
+                        'Position the BACK of your phone close to the tag and keep it steady',
+                        style: TextStyle(fontSize: 14, color: Colors.grey),
+                        textAlign: TextAlign.center,
                       ),
                     ),
                   ] else if (_tagId != null || _scannedData != null) ...[
@@ -442,7 +283,7 @@ class _NFCReaderScreenState extends State<NFCReaderScreen> {
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      _scannedData != null 
+                      _scannedData != null
                           ? 'Tag Read Successfully'
                           : 'Tag Detected (Empty)',
                       style: const TextStyle(
@@ -451,7 +292,7 @@ class _NFCReaderScreenState extends State<NFCReaderScreen> {
                       ),
                     ),
                     if (_scannedData == null && _tagId != null) ...[
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 16),
                       Container(
                         padding: const EdgeInsets.all(12),
                         margin: const EdgeInsets.symmetric(horizontal: 40),
@@ -463,7 +304,7 @@ class _NFCReaderScreenState extends State<NFCReaderScreen> {
                         child: const Column(
                           children: [
                             Text(
-                              '✓ NFC Tag Detected Successfully!',
+                              '✓ NFC Tag Detected!',
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.bold,
@@ -473,11 +314,8 @@ class _NFCReaderScreenState extends State<NFCReaderScreen> {
                             ),
                             SizedBox(height: 4),
                             Text(
-                              'This tag is blank/empty. It\'s ready to have data written to it.',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey,
-                              ),
+                              'This tag is blank. Tap "Register Tag" to write data to it.',
+                              style: TextStyle(fontSize: 12, color: Colors.grey),
                               textAlign: TextAlign.center,
                             ),
                           ],
@@ -485,63 +323,43 @@ class _NFCReaderScreenState extends State<NFCReaderScreen> {
                       ),
                     ],
                   ] else if (_errorMessage != null) ...[
-                    Icon(
-                      Icons.error_outline,
-                      size: 64,
-                      color: Colors.red,
-                    ),
+                    const Icon(Icons.error_outline, size: 64, color: Colors.red),
                     const SizedBox(height: 16),
-                    Text(
-                      _errorMessage!,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        color: Colors.red,
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 32),
+                      child: Text(
+                        _errorMessage!,
+                        style: const TextStyle(fontSize: 16, color: Colors.red),
+                        textAlign: TextAlign.center,
                       ),
-                      textAlign: TextAlign.center,
                     ),
                   ] else if (!_isNfcAvailable) ...[
-                    Icon(
-                      Icons.block,
-                      size: 64,
-                      color: Colors.grey,
-                    ),
+                    const Icon(Icons.block, size: 64, color: Colors.grey),
                     const SizedBox(height: 16),
                     const Text(
                       'NFC Not Available',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 8),
-                    const Text(
-                      'This device does not support NFC',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey,
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 32),
+                      child: Text(
+                        _errorMessage ?? 'This device does not support NFC',
+                        style: const TextStyle(fontSize: 14, color: Colors.grey),
+                        textAlign: TextAlign.center,
                       ),
                     ),
                   ] else ...[
-                    Icon(
-                      Icons.nfc,
-                      size: 64,
-                      color: Colors.grey,
-                    ),
+                    const Icon(Icons.nfc, size: 64, color: Colors.grey),
                     const SizedBox(height: 16),
                     const Text(
                       'Ready to Scan',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 8),
                     const Text(
                       'Tap "Start Reading" to begin',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey,
-                      ),
+                      style: TextStyle(fontSize: 14, color: Colors.grey),
                     ),
                   ],
                 ],
@@ -556,51 +374,43 @@ class _NFCReaderScreenState extends State<NFCReaderScreen> {
               child: Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(16.0),
-                color: Theme.of(context).scaffoldBackgroundColor,
                 child: SingleChildScrollView(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       // Verification status
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        margin: const EdgeInsets.only(bottom: 16),
-                        decoration: BoxDecoration(
-                          color: _isVerified
-                              ? Colors.green[100]
-                              : Colors.orange[100],
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: _isVerified ? Colors.green : Colors.orange,
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              _isVerified
-                                  ? Icons.verified
-                                  : Icons.info_outline,
-                              color: _isVerified
-                                  ? Colors.green[900]
-                                  : Colors.orange[900],
+                      if (_scannedData != null)
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          margin: const EdgeInsets.only(bottom: 16),
+                          decoration: BoxDecoration(
+                            color: _isVerified ? Colors.green[100] : Colors.orange[100],
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: _isVerified ? Colors.green : Colors.orange,
                             ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                _isVerified
-                                    ? '✓ Verified - Created by SSS System'
-                                    : '⚠ Not created by this system',
-                                style: TextStyle(
-                                  color: _isVerified
-                                      ? Colors.green[900]
-                                      : Colors.orange[900],
-                                  fontWeight: FontWeight.bold,
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                _isVerified ? Icons.verified : Icons.info_outline,
+                                color: _isVerified ? Colors.green[900] : Colors.orange[900],
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _isVerified
+                                      ? '✓ Verified - Created by SSS System'
+                                      : '⚠ Not created by this system',
+                                  style: TextStyle(
+                                    color: _isVerified ? Colors.green[900] : Colors.orange[900],
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
 
                       // Tag ID
                       if (_tagId != null)
@@ -627,228 +437,142 @@ class _NFCReaderScreenState extends State<NFCReaderScreen> {
                           ),
                         ),
 
-                      // Scanned data
-                      if (_scannedData != null)
-                        Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(16.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Scanned Data:',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                      // Scanned data or empty message
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _scannedData != null ? 'Scanned Data:' : 'Tag Status:',
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
                                 ),
-                                const SizedBox(height: 8),
+                              ),
+                              const SizedBox(height: 8),
+                              if (_scannedData != null)
                                 SelectableText(
                                   _scannedData!,
                                   style: const TextStyle(fontSize: 12),
-                                ),
-                              ],
-                            ),
-                          ),
-                        )
-                      else
-                        Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(16.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Tag Status:',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                const Text(
-                                  'This NFC tag is empty and has no data.',
-                                  style: TextStyle(fontSize: 12),
-                                ),
-                                const SizedBox(height: 8),
-                                const Text(
-                                  'Tap "Register Tag" button below to add title, tags, description, and checklist to this tag.',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontStyle: FontStyle.italic,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-
-                      const SizedBox(height: 16),
-
-                      // EMPTY TAG - Show "Register Tag" button
-                      if (_scannedData == null && _tagId != null)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 8.0),
-                          child: ElevatedButton.icon(
-                            onPressed: () async {
-                              final result = await Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => const NFCTagRegisterScreen(
-                                    isEdit: false,
-                                  ),
-                                ),
-                              );
-                              if (result == true && mounted) {
-                                _resumeReading();
-                              }
-                            },
-                            icon: const Icon(Icons.app_registration),
-                            label: const Text('Register Tag'),
-                            style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              backgroundColor: Colors.green[700],
-                              foregroundColor: Colors.white,
-                            ),
-                          ),
-                        ),
-
-                      // TAG WITH DATA - Show "Edit" and "Clear" buttons
-                      if (_scannedData != null) ...[
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 8.0),
-                          child: ElevatedButton.icon(
-                            onPressed: () async {
-                              final result = await Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => NFCTagRegisterScreen(
-                                    existingData: _registrationData,
-                                    tagId: _tagId,
-                                    isEdit: true,
-                                  ),
-                                ),
-                              );
-                              if (result == true && mounted) {
-                                _resumeReading();
-                              }
-                            },
-                            icon: const Icon(Icons.edit),
-                            label: const Text('Edit Tag'),
-                            style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              backgroundColor: Colors.blue[700],
-                              foregroundColor: Colors.white,
-                            ),
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 8.0),
-                          child: ElevatedButton.icon(
-                            onPressed: () async {
-                              // Confirm before clearing
-                              final confirm = await showDialog<bool>(
-                                context: context,
-                                builder: (context) => AlertDialog(
-                                  title: const Text('Clear Tag?'),
-                                  content: const Text(
-                                    'This will permanently delete all data from the tag. Are you sure?',
-                                  ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () => Navigator.pop(context, false),
-                                      child: const Text('Cancel'),
+                                )
+                              else
+                                const Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'This NFC tag is empty.',
+                                      style: TextStyle(fontSize: 12),
                                     ),
-                                    TextButton(
-                                      onPressed: () => Navigator.pop(context, true),
-                                      style: TextButton.styleFrom(
-                                        foregroundColor: Colors.red,
+                                    SizedBox(height: 8),
+                                    Text(
+                                      'Tap "Register Tag" to write data.',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontStyle: FontStyle.italic,
+                                        color: Colors.grey,
                                       ),
-                                      child: const Text('Clear Tag'),
                                     ),
                                   ],
                                 ),
-                              );
-
-                              if (confirm == true && mounted) {
-                                setState(() {
-                                  _isProcessing = true;
-                                  _errorMessage = null;
-                                });
-
-                                try {
-                                  // Write empty string to clear the tag
-                                  final success = await NFCService.writeNFCTag(
-                                    data: '',
-                                    tagId: _tagId,
-                                  );
-
-                                  if (mounted) {
-                                    if (success) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(
-                                          content: Text('Tag cleared successfully!'),
-                                          backgroundColor: Colors.green,
-                                        ),
-                                      );
-                                      _resumeReading();
-                                    } else {
-                                      setState(() {
-                                        _errorMessage = 'Failed to clear tag';
-                                        _isProcessing = false;
-                                      });
-                                    }
-                                  }
-                                } catch (e) {
-                                  if (mounted) {
-                                    setState(() {
-                                      _errorMessage = 'Error clearing tag: $e';
-                                      _isProcessing = false;
-                                    });
-                                  }
-                                }
-                              }
-                            },
-                            icon: const Icon(Icons.delete_forever),
-                            label: const Text('Clear Tag'),
-                            style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              backgroundColor: Colors.red[700],
-                              foregroundColor: Colors.white,
-                            ),
+                            ],
                           ),
                         ),
-                      ],
+                      ),
 
-                      // View Details button
-                      if (_tagDetails != null)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 8.0),
-                          child: ElevatedButton.icon(
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => NFCTagDetailsScreen(
-                                    tagDetails: _tagDetails!,
-                                  ),
-                                ),
-                              );
-                            },
-                            icon: const Icon(Icons.info_outline),
-                            label: const Text('View Tag Details'),
-                            style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              backgroundColor: Colors.orange[700],
-                              foregroundColor: Colors.white,
-                            ),
-                          ),
-                        ),
-
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 16),
 
                       // Action buttons
+                      if (_scannedData == null && _tagId != null)
+                        ElevatedButton.icon(
+                          onPressed: () async {
+                            final result = await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const NFCTagRegisterScreen(
+                                  isEdit: false,
+                                ),
+                              ),
+                            );
+                            if (result is String && mounted) {
+                              _writeTagData(result);
+                            }
+                          },
+                          icon: const Icon(Icons.app_registration),
+                          label: const Text('Register Tag'),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            backgroundColor: Colors.green[700],
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+
+                      if (_scannedData != null) ...[
+                        ElevatedButton.icon(
+                          onPressed: () async {
+                            final result = await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => NFCTagRegisterScreen(
+                                  existingData: _registrationData,
+                                  tagId: _tagId,
+                                  isEdit: true,
+                                ),
+                              ),
+                            );
+                            if (result is String && mounted) {
+                              _writeTagData(result);
+                            }
+                          },
+                          icon: const Icon(Icons.edit),
+                          label: const Text('Edit Tag'),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            backgroundColor: Colors.blue[700],
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        ElevatedButton.icon(
+                          onPressed: () async {
+                            final confirm = await showDialog<bool>(
+                              context: context,
+                              builder: (context) => AlertDialog(
+                                title: const Text('Clear Tag?'),
+                                content: const Text(
+                                  'This will delete all data from the tag. Continue?',
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context, false),
+                                    child: const Text('Cancel'),
+                                  ),
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context, true),
+                                    style: TextButton.styleFrom(
+                                      foregroundColor: Colors.red,
+                                    ),
+                                    child: const Text('Clear'),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (confirm == true && mounted) {
+                              _writeTagData('');
+                            }
+                          },
+                          icon: const Icon(Icons.delete_forever),
+                          label: const Text('Clear Tag'),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            backgroundColor: Colors.red[700],
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+
                       Row(
                         children: [
                           Expanded(
@@ -870,8 +594,7 @@ class _NFCReaderScreenState extends State<NFCReaderScreen> {
                                 label: const Text('Use Data'),
                                 style: ElevatedButton.styleFrom(
                                   padding: const EdgeInsets.symmetric(vertical: 16),
-                                  backgroundColor:
-                                      Theme.of(context).primaryColor,
+                                  backgroundColor: Theme.of(context).primaryColor,
                                 ),
                               ),
                             ),
@@ -884,52 +607,33 @@ class _NFCReaderScreenState extends State<NFCReaderScreen> {
               ),
             )
           else
-            // Instructions when no scan yet
             Expanded(
               flex: 2,
               child: Container(
-                width: double.infinity,
                 padding: const EdgeInsets.all(16.0),
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(
-                        Icons.nfc,
-                        size: 64,
-                        color: Colors.grey,
-                      ),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Hold device near NFC tag',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Position the tag close to your device',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey,
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      if (!_isProcessing && _isNfcAvailable)
-                        ElevatedButton.icon(
-                          onPressed: _startReading,
-                          icon: const Icon(Icons.play_arrow),
-                          label: const Text('Start Reading'),
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                              vertical: 16,
-                              horizontal: 24,
-                            ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.nfc, size: 64, color: Colors.grey),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Ready to scan NFC tags',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 24),
+                    if (!_isProcessing && _isNfcAvailable)
+                      ElevatedButton.icon(
+                        onPressed: _startReading,
+                        icon: const Icon(Icons.play_arrow),
+                        label: const Text('Start Reading'),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 16,
+                            horizontal: 24,
                           ),
                         ),
-                    ],
-                  ),
+                      ),
+                  ],
                 ),
               ),
             ),

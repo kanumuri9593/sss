@@ -73,7 +73,7 @@ class _NFCRegistrationScreenState extends State<NFCRegistrationScreen> {
     _sessionTimeoutTimer?.cancel();
 
     try {
-      await NFCService.stopExistingSession(reason: 'registration_start');
+      await NFCService.stopSession();
 
       final isAvailable = await NFCService.isNFCAvailable();
       if (!isAvailable) {
