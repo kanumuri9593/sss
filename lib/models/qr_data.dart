@@ -104,7 +104,7 @@ class QRData {
     return '$timestamp-$randomComponent';
   }
 
-  /// Build a deep link URL of the form: sss://qr/<id>
+  /// Build a deep link URL of the form: sss://qr/[id]
   String buildDeepLink() {
     return '$deepLinkScheme://$deepLinkHost/$id';
   }

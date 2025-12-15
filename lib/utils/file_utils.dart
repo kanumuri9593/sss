@@ -77,5 +77,32 @@ class FileUtils {
       return null;
     }
   }
+
+  /// Get a directory for storing container/item photos
+  static Future<Directory> getPhotosDirectory() async {
+    final documentsDir = await getDocumentsDirectory();
+    final photosDir = Directory('${documentsDir.path}/photos');
+    if (!await photosDir.exists()) {
+      await photosDir.create(recursive: true);
+    }
+    return photosDir;
+  }
+
+  /// Get a file path for a photo
+  static Future<String> getPhotoFilePath(String fileName) async {
+    final directory = await getPhotosDirectory();
+    return '${directory.path}/$fileName';
+  }
+
+  /// Copy a file to the photos directory
+  static Future<String?> savePhoto(File sourceFile, String fileName) async {
+    try {
+      final destPath = await getPhotoFilePath(fileName);
+      await sourceFile.copy(destPath);
+      return destPath;
+    } catch (e) {
+      return null;
+    }
+  }
 }
 

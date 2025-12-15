@@ -40,6 +40,7 @@ dependencies:
 
   # File system paths
   path_provider: ^2.1.1
+  path: ^1.9.0
 
   # Share/email functionality
   share_plus: ^7.2.1
@@ -66,6 +67,17 @@ dependencies:
   # Liquid glass theme components
   cupertino_native_better: ^1.1.9
 
+  # On-device storage
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+
+  # Image recognition (on-device ML) - disabled due to dependency conflicts
+  # Will be enabled in future update with compatible versions
+  # google_mlkit_image_labeling: ^0.14.1
+
+  # Image picker
+  image_picker: ^1.0.7
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -79,6 +91,10 @@ dev_dependencies:
 
   # App icon generation
   flutter_launcher_icons: ^0.13.1
+
+  # Hive code generation
+  hive_generator: ^2.0.1
+  build_runner: ^2.4.8
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cupertino_native_better/cupertino_native_better.dart';
 import 'qr_poc_screen.dart';
 import 'nfc_poc_screen.dart';
+import 'container_list_screen.dart';
+import 'search_screen.dart';
 
 /// Main Tab Screen with Liquid Glass Theme
 /// 
@@ -20,7 +22,7 @@ class _MainTabScreenState extends State<MainTabScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
   }
 
   @override
@@ -38,6 +40,14 @@ class _MainTabScreenState extends State<MainTabScreen>
           controller: _tabController,
           tabs: const [
             Tab(
+              icon: Icon(Icons.inventory_2),
+              text: 'Containers',
+            ),
+            Tab(
+              icon: Icon(Icons.search),
+              text: 'Search',
+            ),
+            Tab(
               icon: Icon(Icons.qr_code),
               text: 'QR Code',
             ),
@@ -53,6 +63,8 @@ class _MainTabScreenState extends State<MainTabScreen>
         child: TabBarView(
           controller: _tabController,
           children: const [
+            ContainerListScreen(),
+            SearchScreen(),
             QRPOCScreen(),
             NFCPOCScreen(),
           ],

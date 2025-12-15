@@ -5,10 +5,27 @@ import 'theme/app_theme.dart';
 import 'screens/main_tab_screen.dart';
 import 'screens/qr_detail_screen.dart';
 import 'screens/nfc_detail_screen.dart';
+import 'screens/container_detail_screen.dart';
 import 'services/qr_service.dart';
 import 'services/nfc_service.dart';
+import 'services/storage_service.dart';
+import 'services/container_service.dart';
+import 'services/image_recognition_service.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize storage
+  try {
+    await StorageService.initialize();
+    debugPrint('[main] Storage initialized');
+  } catch (e) {
+    debugPrint('[main] Error initializing storage: $e');
+  }
+
+  // Initialize image recognition
+  await ImageRecognitionService.initialize();
+
   runApp(const MyApp());
 }
 
@@ -51,62 +68,102 @@ class _MyAppState extends State<MyApp> {
 
   void _handleDeepLink(String link) {
     debugPrint('Received deep link: $link');
-    // Parse sss://qr/<id> (works for both QR and NFC)
     final uri = Uri.parse(link);
-    if (uri.scheme == 'sss' && uri.host == 'qr') {
-      final id = uri.pathSegments.isNotEmpty ? uri.pathSegments.first : '';
-      if (id.isNotEmpty) {
-        // Check if it's a QR code or NFC tag
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            // Try QR first, then NFC
-            final qrData = QRService.getQRDataById(id);
-            if (qrData != null) {
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute(
-                  builder: (context) => QRDetailScreen(qrId: id),
-                ),
-              );
-            } else {
+    
+    if (uri.scheme == 'sss') {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          if (uri.host == 'container') {
+            // Handle container deep link: sss://container/<id>
+            final containerId = uri.pathSegments.isNotEmpty ? uri.pathSegments.first : '';
+            if (containerId.isNotEmpty) {
+              final container = ContainerService.getContainer(containerId);
+              if (container != null) {
+                Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(
+                    builder: (context) => ContainerDetailScreen(containerId: containerId),
+                  ),
+                );
+                return;
+              }
+            }
+          } else if (uri.host == 'qr') {
+            // Handle QR/NFC deep link: sss://qr/<id>
+            final id = uri.pathSegments.isNotEmpty ? uri.pathSegments.first : '';
+            if (id.isNotEmpty) {
+              // Check if it's linked to a container
+              final container = ContainerService.getContainerByQRCode(id);
+              if (container != null) {
+                Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(
+                    builder: (context) => ContainerDetailScreen(containerId: container.id),
+                  ),
+                );
+                return;
+              }
+
+              // Check if it's a QR code or NFC tag
+              final qrData = QRService.getQRDataById(id);
+              if (qrData != null) {
+                Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(
+                    builder: (context) => QRDetailScreen(qrId: id),
+                  ),
+                );
+                return;
+              }
+
               // Try NFC
               final nfcData = NFCService.getNFCTagDataById(id);
               if (nfcData != null) {
+                // Check if NFC is linked to a container
+                final nfcContainer = ContainerService.getContainerByNFCTag(id);
+                if (nfcContainer != null) {
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(
+                      builder: (context) => ContainerDetailScreen(containerId: nfcContainer.id),
+                    ),
+                  );
+                  return;
+                }
+
                 Navigator.of(context).pushReplacement(
                   MaterialPageRoute(
                     builder: (context) => NFCDetailScreen(nfcId: id),
                   ),
                 );
-              } else {
-                // Not found in either registry, show error
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(
-                    builder: (context) => Scaffold(
-                      appBar: AppBar(
-                        title: const Text('Not Found'),
-                      ),
-                      body: Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.error_outline, size: 64, color: Colors.red),
-                            const SizedBox(height: 16),
-                            const Text('Item not found'),
-                            const SizedBox(height: 24),
-                            ElevatedButton(
-                              onPressed: () => Navigator.pop(context),
-                              child: const Text('Go Back'),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                );
+                return;
               }
             }
           }
-        });
-      }
+
+          // Not found, show error
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (context) => Scaffold(
+                appBar: AppBar(
+                  title: const Text('Not Found'),
+                ),
+                body: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.error_outline, size: 64, color: Colors.red),
+                      const SizedBox(height: 16),
+                      const Text('Item not found'),
+                      const SizedBox(height: 24),
+                      ElevatedButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Go Back'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+      });
     }
   }
 
@@ -125,23 +182,47 @@ class _MyAppState extends State<MyApp> {
       themeMode: ThemeMode.system,
       home: const MainTabScreen(),
       onGenerateRoute: (settings) {
-        // Handle deep link routes (works for both QR and NFC)
-        if (settings.name?.startsWith('sss://qr/') ?? false) {
+        // Handle deep link routes
+        if (settings.name?.startsWith('sss://') ?? false) {
           final uri = Uri.parse(settings.name!);
-          final id = uri.pathSegments.isNotEmpty ? uri.pathSegments.first : '';
-          if (id.isNotEmpty) {
-            // Try QR first, then NFC
-            final qrData = QRService.getQRDataById(id);
-            if (qrData != null) {
+          
+          if (uri.host == 'container') {
+            final containerId = uri.pathSegments.isNotEmpty ? uri.pathSegments.first : '';
+            if (containerId.isNotEmpty) {
               return MaterialPageRoute(
-                builder: (context) => QRDetailScreen(qrId: id),
+                builder: (context) => ContainerDetailScreen(containerId: containerId),
               );
-            } else {
-              final nfcData = NFCService.getNFCTagDataById(id);
-              if (nfcData != null) {
+            }
+          } else if (uri.host == 'qr') {
+            final id = uri.pathSegments.isNotEmpty ? uri.pathSegments.first : '';
+            if (id.isNotEmpty) {
+              // Check if linked to container
+              final container = ContainerService.getContainerByQRCode(id);
+              if (container != null) {
                 return MaterialPageRoute(
-                  builder: (context) => NFCDetailScreen(nfcId: id),
+                  builder: (context) => ContainerDetailScreen(containerId: container.id),
                 );
+              }
+
+              // Try QR first, then NFC
+              final qrData = QRService.getQRDataById(id);
+              if (qrData != null) {
+                return MaterialPageRoute(
+                  builder: (context) => QRDetailScreen(qrId: id),
+                );
+              } else {
+                final nfcData = NFCService.getNFCTagDataById(id);
+                if (nfcData != null) {
+                  final nfcContainer = ContainerService.getContainerByNFCTag(id);
+                  if (nfcContainer != null) {
+                    return MaterialPageRoute(
+                      builder: (context) => ContainerDetailScreen(containerId: nfcContainer.id),
+                    );
+                  }
+                  return MaterialPageRoute(
+                    builder: (context) => NFCDetailScreen(nfcId: id),
+                  );
+                }
               }
             }
           }
