@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:cupertino_native_better/cupertino_native_better.dart';
 import 'qr_poc_screen.dart';
 import 'nfc_poc_screen.dart';
 import 'container_list_screen.dart';
@@ -58,17 +57,14 @@ class _MainTabScreenState extends State<MainTabScreen>
           ],
         ),
       ),
-      body: LiquidGlassContainer(
-        config: const LiquidGlassConfig(),
-        child: TabBarView(
-          controller: _tabController,
-          children: const [
-            ContainerListScreen(),
-            SearchScreen(),
-            QRPOCScreen(),
-            NFCPOCScreen(),
-          ],
-        ),
+      body: TabBarView(
+        controller: _tabController,
+        children: const [
+          ContainerListScreen(),
+          SearchScreen(),
+          QRPOCScreen(),
+          NFCPOCScreen(),
+        ],
       ),
     );
   }

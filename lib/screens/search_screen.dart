@@ -1,6 +1,7 @@
+import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'dart:io';
 import '../models/item.dart';
 import '../models/container.dart' as models;
 import '../services/item_service.dart';
@@ -28,6 +29,7 @@ class _SearchScreenState extends State<SearchScreen> {
   List<models.Container> _containerResults = [];
   bool _isSearching = false;
   Set<String> _availableTags = {};
+  Timer? _searchDebounceTimer;
 
   @override
   void initState() {
@@ -38,6 +40,7 @@ class _SearchScreenState extends State<SearchScreen> {
 
   @override
   void dispose() {
+    _searchDebounceTimer?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -60,11 +63,17 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   void _onSearchChanged() {
+    // Debounce search to avoid excessive rebuilds
     final query = _searchController.text.trim();
     setState(() {
       _searchQuery = query;
     });
-    _performSearch();
+    _searchDebounceTimer?.cancel();
+    _searchDebounceTimer = Timer(const Duration(milliseconds: 300), () {
+      if (mounted && _searchController.text.trim() == query) {
+        _performSearch();
+      }
+    });
   }
 
   void _performSearch() {
@@ -327,10 +336,14 @@ class _SearchScreenState extends State<SearchScreen> {
                                     itemCount: _containerResults.length,
                                     itemBuilder: (context, index) {
                                       final container = _containerResults[index];
+                                      final itemCount = ItemService.getItemsByContainer(container.id).length;
+                                      final childContainerCount = ContainerService.getChildContainers(container.id).length;
                                       return SizedBox(
                                         width: 160,
                                         child: ContainerCard(
                                           container: container,
+                                          itemCount: itemCount,
+                                          childContainerCount: childContainerCount,
                                           onTap: () {
                                             Navigator.push(
                                               context,

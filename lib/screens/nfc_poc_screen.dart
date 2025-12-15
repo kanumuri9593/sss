@@ -190,23 +190,23 @@ class _NFCPOCScreenState extends State<NFCPOCScreen> {
                   }
                   final availability = snapshot.data!;
                   String message;
-                  Color? bgColor;
-                  Color? borderColor;
+                  Color bgColor;
+                  Color borderColor;
                   IconData icon;
                   
                   if (availability == NfcAvailability.disabled) {
                     message = 'NFC is disabled. Please enable NFC in Settings > General > NFC.';
-                    bgColor = Colors.orange[100];
+                    bgColor = Colors.orange[100]!;
                     borderColor = Colors.orange;
                     icon = Icons.nfc;
                   } else if (availability == NfcAvailability.unsupported) {
                     message = 'NFC is not supported on this device.';
-                    bgColor = Colors.red[100];
+                    bgColor = Colors.red[100]!;
                     borderColor = Colors.red;
                     icon = Icons.block;
                   } else {
                     message = 'NFC status: $availability';
-                    bgColor = Colors.grey[100];
+                    bgColor = Colors.grey[100]!;
                     borderColor = Colors.grey;
                     icon = Icons.info;
                   }
@@ -217,7 +217,7 @@ class _NFCPOCScreenState extends State<NFCPOCScreen> {
                     decoration: BoxDecoration(
                       color: bgColor,
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: borderColor!),
+                      border: Border.all(color: borderColor),
                     ),
                     child: Row(
                       children: [

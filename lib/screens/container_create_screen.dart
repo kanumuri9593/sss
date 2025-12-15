@@ -5,11 +5,9 @@ import 'package:path/path.dart' as path;
 import '../models/container.dart' as models;
 import '../services/container_service.dart';
 import '../services/qr_service.dart';
-import '../services/nfc_service.dart';
 import '../models/qr_data.dart';
 import '../utils/file_utils.dart';
 import 'nfc_write_screen.dart';
-import 'qr_poc_screen.dart';
 
 /// Container Create/Edit Screen
 /// 

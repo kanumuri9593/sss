@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/container.dart' as models;
 import '../services/container_service.dart';
+import '../services/item_service.dart';
 import '../widgets/container_card.dart';
 import 'container_detail_screen.dart';
 import 'container_create_screen.dart';
@@ -20,6 +22,7 @@ class _ContainerListScreenState extends State<ContainerListScreen> {
   List<models.Container> _containers = [];
   List<models.Container> _filteredContainers = [];
   bool _isGridView = true;
+  Timer? _searchDebounceTimer;
 
   @override
   void initState() {
@@ -30,6 +33,7 @@ class _ContainerListScreenState extends State<ContainerListScreen> {
 
   @override
   void dispose() {
+    _searchDebounceTimer?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -42,13 +46,18 @@ class _ContainerListScreenState extends State<ContainerListScreen> {
   }
 
   void _onSearchChanged() {
-    final query = _searchController.text;
-    setState(() {
-      if (query.isEmpty) {
-        _filteredContainers = _containers;
-      } else {
-        _filteredContainers = ContainerService.searchContainers(query);
-      }
+    // Debounce search to avoid excessive rebuilds
+    _searchDebounceTimer?.cancel();
+    _searchDebounceTimer = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      final query = _searchController.text;
+      setState(() {
+        if (query.isEmpty) {
+          _filteredContainers = _containers;
+        } else {
+          _filteredContainers = ContainerService.searchContainers(query);
+        }
+      });
     });
   }
 
@@ -163,8 +172,12 @@ class _ContainerListScreenState extends State<ContainerListScreen> {
                           itemCount: _filteredContainers.length,
                           itemBuilder: (context, index) {
                             final container = _filteredContainers[index];
+                            final itemCount = ItemService.getItemsByContainer(container.id).length;
+                            final childContainerCount = ContainerService.getChildContainers(container.id).length;
                             return ContainerCard(
                               container: container,
+                              itemCount: itemCount,
+                              childContainerCount: childContainerCount,
                               onTap: () => _navigateToDetail(container),
                             );
                           },
@@ -174,10 +187,14 @@ class _ContainerListScreenState extends State<ContainerListScreen> {
                           itemCount: _filteredContainers.length,
                           itemBuilder: (context, index) {
                             final container = _filteredContainers[index];
+                            final itemCount = ItemService.getItemsByContainer(container.id).length;
+                            final childContainerCount = ContainerService.getChildContainers(container.id).length;
                             return Padding(
                               padding: const EdgeInsets.only(bottom: 16),
                               child: ContainerCard(
                                 container: container,
+                                itemCount: itemCount,
+                                childContainerCount: childContainerCount,
                                 onTap: () => _navigateToDetail(container),
                               ),
                             );

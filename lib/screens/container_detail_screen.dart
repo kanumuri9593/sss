@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import '../models/container.dart' as models;
@@ -30,6 +31,7 @@ class _ContainerDetailScreenState extends State<ContainerDetailScreen> {
   bool _isLoading = true;
   final TextEditingController _searchController = TextEditingController();
   List<Item> _filteredItems = [];
+  Timer? _searchDebounceTimer;
 
   @override
   void initState() {
@@ -40,6 +42,7 @@ class _ContainerDetailScreenState extends State<ContainerDetailScreen> {
 
   @override
   void dispose() {
+    _searchDebounceTimer?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -75,13 +78,19 @@ class _ContainerDetailScreenState extends State<ContainerDetailScreen> {
   }
 
   void _onSearchChanged() {
+    // Debounce search to avoid excessive rebuilds
     final query = _searchController.text;
-    setState(() {
-      if (query.isEmpty) {
-        _filteredItems = _items;
-      } else {
-        _filteredItems = ItemService.searchItemsInContainer(widget.containerId, query);
-      }
+    _searchDebounceTimer?.cancel();
+    _searchDebounceTimer = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      if (_searchController.text != query) return; // Query changed, ignore this update
+      setState(() {
+        if (query.isEmpty) {
+          _filteredItems = _items;
+        } else {
+          _filteredItems = ItemService.searchItemsInContainer(widget.containerId, query);
+        }
+      });
     });
   }
 
@@ -201,6 +210,7 @@ class _ContainerDetailScreenState extends State<ContainerDetailScreen> {
                     child: Image.file(
                       File(_container!.photoPath!),
                       fit: BoxFit.cover,
+                      cacheWidth: 800, // Limit image resolution for better performance
                       errorBuilder: (context, error, stackTrace) {
                         return Container(
                           height: 200,

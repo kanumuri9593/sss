@@ -18,6 +18,9 @@ class NFCService {
   /// Track active NFC session state
   static bool _sessionActive = false;
 
+  /// Check if an NFC session is currently active
+  static bool get isSessionActive => _sessionActive;
+
   /// Check if NFC is available on the device.
   static Future<bool> isNFCAvailable() async {
     try {

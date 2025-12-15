@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 // Image recognition disabled - using stub implementation
 // import 'package:google_mlkit_image_labeling/google_mlkit_image_labeling.dart';
@@ -109,22 +108,6 @@ class ImageRecognitionService {
     // }
   }
 
-  /// Format a label text into a tag format
-  ///
-  /// Converts labels like "winter clothing" to "winter-clothing" or "winterclothing"
-  static String _formatTag(String label) {
-    // Remove special characters, keep alphanumeric and spaces
-    final cleaned = label.replaceAll(RegExp(r'[^a-z0-9\s]'), '');
-    
-    // Replace multiple spaces with single space
-    final normalized = cleaned.replaceAll(RegExp(r'\s+'), ' ').trim();
-    
-    // Option 1: Keep as is (with spaces)
-    // Option 2: Replace spaces with hyphens
-    // Option 3: Remove spaces
-    // Using option 2 for better tag readability
-    return normalized.replaceAll(' ', '-');
-  }
 
   /// Get top N tag suggestions from an image
   ///

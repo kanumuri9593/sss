@@ -2,11 +2,12 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import '../models/item.dart';
 import '../models/container.dart' as models;
-import '../services/container_service.dart';
 
 /// Item Card Widget
 ///
 /// Displays an item in a card format with photo, name, and tags.
+/// Performance optimized: container is passed as parameter instead of being
+/// looked up on every build.
 class ItemCard extends StatelessWidget {
   final Item item;
   final models.Container? container; // Optional container for display
@@ -23,7 +24,7 @@ class ItemCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final displayContainer = container ?? ContainerService.getContainer(item.containerId);
+    final displayContainer = container;
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -32,6 +33,7 @@ class ItemCard extends StatelessWidget {
         onLongPress: onLongPress,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
             // Item Photo
             AspectRatio(
@@ -43,6 +45,7 @@ class ItemCard extends StatelessWidget {
               padding: const EdgeInsets.all(12.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   // Name
                   Text(
@@ -104,16 +107,14 @@ class ItemCard extends StatelessWidget {
 
   Widget _buildPhoto(BuildContext context) {
     if (item.photoPath != null) {
-      final file = File(item.photoPath!);
-      if (file.existsSync()) {
-        return Image.file(
-          file,
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) {
-            return _buildPlaceholder(context);
-          },
-        );
-      }
+      return Image.file(
+        File(item.photoPath!),
+        fit: BoxFit.cover,
+        cacheWidth: 400, // Limit image resolution for better performance
+        errorBuilder: (context, error, stackTrace) {
+          return _buildPlaceholder(context);
+        },
+      );
     }
     return _buildPlaceholder(context);
   }

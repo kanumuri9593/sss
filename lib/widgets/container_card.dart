@@ -1,28 +1,30 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import '../models/container.dart' as models;
-import '../services/container_service.dart';
-import '../services/item_service.dart';
 
 /// Container Card Widget
 ///
 /// Displays a container in a card format with photo, name, type, and item count.
+/// Performance optimized: item and child container counts are passed as parameters
+/// instead of being calculated on every build.
 class ContainerCard extends StatelessWidget {
   final models.Container container;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
+  final int itemCount;
+  final int childContainerCount;
 
   const ContainerCard({
     super.key,
     required this.container,
     this.onTap,
     this.onLongPress,
+    this.itemCount = 0,
+    this.childContainerCount = 0,
   });
 
   @override
   Widget build(BuildContext context) {
-    final itemCount = ItemService.getItemsByContainer(container.id).length;
-    final childContainerCount = ContainerService.getChildContainers(container.id).length;
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -31,6 +33,7 @@ class ContainerCard extends StatelessWidget {
         onLongPress: onLongPress,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
             // Container Photo
             AspectRatio(
@@ -42,6 +45,7 @@ class ContainerCard extends StatelessWidget {
               padding: const EdgeInsets.all(12.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   // Name and Type
                   Row(
@@ -65,14 +69,18 @@ class ContainerCard extends StatelessWidget {
                   // Type and Count
                   Row(
                     children: [
-                      Text(
-                        container.typeDisplayName,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Theme.of(context).colorScheme.onSurfaceVariant,
-                            ),
+                      Flexible(
+                        child: Text(
+                          container.typeDisplayName,
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
                       ),
-                      const SizedBox(width: 8),
                       if (itemCount > 0 || childContainerCount > 0) ...[
+                        const SizedBox(width: 8),
                         Text(
                           '•',
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -80,19 +88,27 @@ class ContainerCard extends StatelessWidget {
                               ),
                         ),
                         const SizedBox(width: 8),
-                        Text(
-                          '$itemCount item${itemCount != 1 ? 's' : ''}',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                              ),
+                        Flexible(
+                          child: Text(
+                            '$itemCount item${itemCount != 1 ? 's' : ''}',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
                         ),
                         if (childContainerCount > 0) ...[
                           const SizedBox(width: 4),
-                          Text(
-                            '+ $childContainerCount container${childContainerCount != 1 ? 's' : ''}',
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: Theme.of(context).colorScheme.primary,
-                                ),
+                          Flexible(
+                            child: Text(
+                              '+ $childContainerCount container${childContainerCount != 1 ? 's' : ''}',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: Theme.of(context).colorScheme.primary,
+                                  ),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                            ),
                           ),
                         ],
                       ],
@@ -127,16 +143,14 @@ class ContainerCard extends StatelessWidget {
 
   Widget _buildPhoto(BuildContext context) {
     if (container.photoPath != null) {
-      final file = File(container.photoPath!);
-      if (file.existsSync()) {
-        return Image.file(
-          file,
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) {
-            return _buildPlaceholder(context);
-          },
-        );
-      }
+      return Image.file(
+        File(container.photoPath!),
+        fit: BoxFit.cover,
+        cacheWidth: 400, // Limit image resolution for better performance
+        errorBuilder: (context, error, stackTrace) {
+          return _buildPlaceholder(context);
+        },
+      );
     }
     return _buildPlaceholder(context);
   }
