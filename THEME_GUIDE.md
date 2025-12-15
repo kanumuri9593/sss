@@ -102,3 +102,5 @@ Theme.of(context).colorScheme.tertiary
 - Use the same primary blue (`#2563EB`) for app icons and splash screens
 - Ensure icon star color (`#F59E0B`) has sufficient contrast
 
+
+
