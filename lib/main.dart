@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:uni_links/uni_links.dart';
 import 'theme/app_theme.dart';
-import 'screens/main_tab_screen.dart';
+import 'screens/container_list_screen.dart';
 import 'screens/qr_detail_screen.dart';
 import 'screens/nfc_detail_screen.dart';
 import 'screens/container_detail_screen.dart';
@@ -180,7 +180,7 @@ class _MyAppState extends State<MyApp> {
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: ThemeMode.system,
-      home: const MainTabScreen(),
+      home: const ContainerListScreen(),
       onGenerateRoute: (settings) {
         // Handle deep link routes
         if (settings.name?.startsWith('sss://') ?? false) {

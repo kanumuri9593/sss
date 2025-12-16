@@ -5,13 +5,12 @@ import '../models/container.dart' as models;
 import '../models/item.dart';
 import '../services/container_service.dart';
 import '../services/item_service.dart';
-import '../widgets/item_card.dart';
 import 'item_create_screen.dart';
 import 'container_create_screen.dart';
 
 /// Container Detail Screen
 ///
-/// Shows container information, items, and nested containers.
+/// Shows container information, items in a reorderable list, and nested containers.
 class ContainerDetailScreen extends StatefulWidget {
   final String containerId;
 
@@ -32,6 +31,8 @@ class _ContainerDetailScreenState extends State<ContainerDetailScreen> {
   final TextEditingController _searchController = TextEditingController();
   List<Item> _filteredItems = [];
   Timer? _searchDebounceTimer;
+  Map<String, List<Item>> _itemGroups = {}; // Group name -> items
+  List<String> _groupOrder = []; // Order of groups
 
   @override
   void initState() {
@@ -57,6 +58,9 @@ class _ContainerDetailScreenState extends State<ContainerDetailScreen> {
       final items = ItemService.getItemsByContainer(widget.containerId);
       final childContainers = ContainerService.getChildContainers(widget.containerId);
 
+      // Organize items into groups
+      _organizeItemsIntoGroups(items);
+
       setState(() {
         _container = container;
         _items = items;
@@ -77,6 +81,16 @@ class _ContainerDetailScreenState extends State<ContainerDetailScreen> {
     }
   }
 
+  void _organizeItemsIntoGroups(List<Item> items) {
+    _itemGroups.clear();
+    _groupOrder.clear();
+    
+    // For now, use a simple "Ungrouped" group
+    // In the future, items could have a groupId field
+    _itemGroups['Ungrouped'] = List.from(items);
+    _groupOrder.add('Ungrouped');
+  }
+
   void _onSearchChanged() {
     // Debounce search to avoid excessive rebuilds
     final query = _searchController.text;
@@ -90,6 +104,7 @@ class _ContainerDetailScreenState extends State<ContainerDetailScreen> {
         } else {
           _filteredItems = ItemService.searchItemsInContainer(widget.containerId, query);
         }
+        _organizeItemsIntoGroups(_filteredItems);
       });
     });
   }
@@ -118,16 +133,26 @@ class _ContainerDetailScreenState extends State<ContainerDetailScreen> {
     }
   }
 
-  Future<void> _deleteContainer() async {
-    if (_container == null) return;
+  Future<void> _editItem(Item item) async {
+    final result = await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ItemCreateScreen(
+          containerId: widget.containerId,
+          item: item,
+        ),
+      ),
+    );
+    if (result == true) {
+      _loadContainer();
+    }
+  }
 
+  Future<void> _deleteItem(Item item) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Container'),
-        content: Text(
-          'Are you sure you want to delete "${_container!.name}"? This will also delete all items and nested containers.',
-        ),
+        title: const Text('Delete Item'),
+        content: Text('Are you sure you want to delete "${item.name}"?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -145,18 +170,77 @@ class _ContainerDetailScreenState extends State<ContainerDetailScreen> {
     );
 
     if (confirmed == true) {
-      final success = await ContainerService.deleteContainer(widget.containerId);
+      final success = await ItemService.deleteItem(item.id);
       if (success && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Container deleted')),
+          const SnackBar(content: Text('Item deleted')),
         );
-        Navigator.of(context).pop(true);
+        _loadContainer();
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to delete container')),
+          const SnackBar(content: Text('Failed to delete item')),
         );
       }
     }
+  }
+
+  Future<void> _createGroup() async {
+    final controller = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Create Sublist'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            labelText: 'Sublist Name',
+            hintText: 'e.g., Electronics, Books, etc.',
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (controller.text.trim().isNotEmpty) {
+                Navigator.pop(context, controller.text.trim());
+              }
+            },
+            child: const Text('Create'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && result.isNotEmpty) {
+      setState(() {
+        if (!_itemGroups.containsKey(result)) {
+          _itemGroups[result] = [];
+          _groupOrder.add(result);
+        }
+      });
+    }
+  }
+
+  Future<void> _reorderItems(int oldIndex, int newIndex, String groupName) async {
+    if (oldIndex < newIndex) {
+      newIndex -= 1;
+    }
+
+    setState(() {
+      final items = _itemGroups[groupName] ?? [];
+      if (oldIndex < items.length && newIndex < items.length) {
+        final item = items.removeAt(oldIndex);
+        items.insert(newIndex, item);
+        _itemGroups[groupName] = items;
+      }
+    });
+
+    // TODO: Save order to persistent storage if needed
+    // For now, order is only maintained in memory
   }
 
   @override
@@ -210,7 +294,7 @@ class _ContainerDetailScreenState extends State<ContainerDetailScreen> {
                     child: Image.file(
                       File(_container!.photoPath!),
                       fit: BoxFit.cover,
-                      cacheWidth: 800, // Limit image resolution for better performance
+                      cacheWidth: 800,
                       errorBuilder: (context, error, stackTrace) {
                         return Container(
                           height: 200,
@@ -347,16 +431,27 @@ class _ContainerDetailScreenState extends State<ContainerDetailScreen> {
                 ),
               ),
             ),
-          // Items
+          // Items Header with Create Sublist button
           SliverPadding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
             sliver: SliverToBoxAdapter(
-              child: Text(
-                'Items (${_filteredItems.length})',
-                style: Theme.of(context).textTheme.titleMedium,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Items (${_filteredItems.length})',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  TextButton.icon(
+                    onPressed: _createGroup,
+                    icon: const Icon(Icons.add),
+                    label: const Text('Create Sublist'),
+                  ),
+                ],
               ),
             ),
           ),
+          // Items by Group
           if (_filteredItems.isEmpty)
             SliverFillRemaining(
               hasScrollBody: false,
@@ -392,28 +487,98 @@ class _ContainerDetailScreenState extends State<ContainerDetailScreen> {
               ),
             )
           else
-            SliverGrid(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
-                childAspectRatio: 0.75,
-              ),
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final item = _filteredItems[index];
-                  return ItemCard(
-                    item: item,
-                    container: _container,
-                    onTap: () {
-                      // TODO: Navigate to item detail/edit
-                      _addItem(); // For now, just open edit
-                    },
-                  );
-                },
-                childCount: _filteredItems.length,
-              ),
-            ),
+            ..._groupOrder.map((groupName) {
+              final groupItems = _itemGroups[groupName] ?? [];
+              if (groupItems.isEmpty && groupName != 'Ungrouped') {
+                return const SliverToBoxAdapter(child: SizedBox.shrink());
+              }
+              
+              return SliverMainAxisGroup(
+                slivers: [
+                  // Group Header
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                    sliver: SliverToBoxAdapter(
+                      child: Row(
+                        children: [
+                          Text(
+                            groupName,
+                            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '(${groupItems.length})',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  // Items in Group (Reorderable)
+                  SliverPadding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                    sliver: SliverReorderableList(
+                      itemCount: groupItems.length,
+                      onReorder: (oldIndex, newIndex) {
+                        _reorderItems(oldIndex, newIndex, groupName);
+                      },
+                      itemBuilder: (context, index) {
+                        final item = groupItems[index];
+                        return ReorderableDragStartListener(
+                          key: ValueKey(item.id),
+                          index: index,
+                          child: Card(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            child: ListTile(
+                              leading: item.imagePaths.isNotEmpty
+                                  ? CircleAvatar(
+                                      backgroundImage: FileImage(File(item.imagePaths.first)),
+                                      onBackgroundImageError: (_, __) {},
+                                    )
+                                  : CircleAvatar(
+                                      child: Icon(
+                                        Icons.inventory_2_outlined,
+                                        size: 20,
+                                      ),
+                                    ),
+                              title: Text(item.name),
+                              subtitle: item.description != null
+                                  ? Text(
+                                      item.description!,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    )
+                                  : null,
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.edit),
+                                    onPressed: () => _editItem(item),
+                                    tooltip: 'Edit item',
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete),
+                                    onPressed: () => _deleteItem(item),
+                                    tooltip: 'Delete item',
+                                  ),
+                                  const Icon(Icons.drag_handle),
+                                ],
+                              ),
+                              onTap: () => _editItem(item),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              );
+            }).toList(),
         ],
       ),
       floatingActionButton: FloatingActionButton(
@@ -422,5 +587,46 @@ class _ContainerDetailScreenState extends State<ContainerDetailScreen> {
         tooltip: 'Add item',
       ),
     );
+  }
+
+  Future<void> _deleteContainer() async {
+    if (_container == null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Container'),
+        content: Text(
+          'Are you sure you want to delete "${_container!.name}"? This will also delete all items and nested containers.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      final success = await ContainerService.deleteContainer(widget.containerId);
+      if (success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Container deleted')),
+        );
+        Navigator.of(context).pop(true);
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to delete container')),
+        );
+      }
+    }
   }
 }

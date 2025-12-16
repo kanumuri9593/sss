@@ -41,12 +41,13 @@ class ContainerCard extends StatelessWidget {
               child: _buildPhoto(context),
             ),
             // Container Info
-            Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
                   // Name and Type
                   Row(
                     children: [
@@ -117,22 +118,25 @@ class ContainerCard extends StatelessWidget {
                   // Tags
                   if (container.tags.isNotEmpty) ...[
                     const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 4,
-                      runSpacing: 4,
-                      children: container.tags.take(3).map((tag) {
-                        return Chip(
-                          label: Text(
-                            tag,
-                            style: const TextStyle(fontSize: 10),
-                          ),
-                          padding: EdgeInsets.zero,
-                          visualDensity: VisualDensity.compact,
-                        );
-                      }).toList(),
+                    Flexible(
+                      child: Wrap(
+                        spacing: 4,
+                        runSpacing: 4,
+                        children: container.tags.take(3).map((tag) {
+                          return Chip(
+                            label: Text(
+                              tag,
+                              style: const TextStyle(fontSize: 10),
+                            ),
+                            padding: EdgeInsets.zero,
+                            visualDensity: VisualDensity.compact,
+                          );
+                        }).toList(),
+                      ),
                     ),
                   ],
                 ],
+                ),
               ),
             ),
           ],

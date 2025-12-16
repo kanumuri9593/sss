@@ -20,8 +20,12 @@ class Item {
   /// List of tags for categorization
   final List<String> tags;
 
-  /// Optional path to item photo
+  /// Optional path to item photo (deprecated - use imagePaths instead)
+  @Deprecated('Use imagePaths instead')
   final String? photoPath;
+
+  /// List of image paths for the item (supports multiple images)
+  final List<String> imagePaths;
 
   /// Creation timestamp in ISO 8601 format
   final String createdAt;
@@ -42,15 +46,25 @@ class Item {
     this.description,
     required this.containerId,
     List<String>? tags,
-    this.photoPath,
+    @Deprecated('Use imagePaths instead') this.photoPath,
+    List<String>? imagePaths,
     required this.createdAt,
     required this.updatedAt,
     this.positionX,
     this.positionY,
-  }) : tags = tags ?? [];
+  }) : tags = tags ?? [],
+       imagePaths = imagePaths ?? (photoPath != null ? [photoPath] : []);
 
   /// Create Item from JSON
   factory Item.fromJson(Map<String, dynamic> json) {
+    // Handle migration from photoPath to imagePaths
+    List<String> imagePaths = [];
+    if (json['imagePaths'] != null) {
+      imagePaths = List<String>.from(json['imagePaths'] as List);
+    } else if (json['photoPath'] != null) {
+      imagePaths = [json['photoPath'] as String];
+    }
+    
     return Item(
       id: json['id'] as String,
       name: json['name'] as String,
@@ -60,6 +74,7 @@ class Item {
           ? List<String>.from(json['tags'] as List)
           : [],
       photoPath: json['photoPath'] as String?,
+      imagePaths: imagePaths,
       createdAt: json['createdAt'] as String,
       updatedAt: json['updatedAt'] as String,
       positionX: json['positionX'] != null
@@ -79,7 +94,8 @@ class Item {
       if (description != null) 'description': description,
       'containerId': containerId,
       'tags': tags,
-      if (photoPath != null) 'photoPath': photoPath,
+      if (photoPath != null) 'photoPath': photoPath, // Keep for backward compatibility
+      'imagePaths': imagePaths,
       'createdAt': createdAt,
       'updatedAt': updatedAt,
       if (positionX != null) 'positionX': positionX,
@@ -99,11 +115,17 @@ class Item {
     String? description,
     required String containerId,
     List<String>? tags,
-    String? photoPath,
+    @Deprecated('Use imagePaths instead') String? photoPath,
+    List<String>? imagePaths,
     double? positionX,
     double? positionY,
   }) {
     final now = DateTime.now().toIso8601String();
+    // Handle migration: if photoPath is provided but imagePaths is not, convert it
+    List<String>? finalImagePaths = imagePaths;
+    if (finalImagePaths == null && photoPath != null) {
+      finalImagePaths = [photoPath];
+    }
     return Item(
       id: id ?? _generateId(),
       name: name,
@@ -111,6 +133,7 @@ class Item {
       containerId: containerId,
       tags: tags,
       photoPath: photoPath,
+      imagePaths: finalImagePaths,
       createdAt: now,
       updatedAt: now,
       positionX: positionX,
@@ -125,15 +148,27 @@ class Item {
     String? description,
     String? containerId,
     List<String>? tags,
-    String? photoPath,
+    @Deprecated('Use imagePaths instead') String? photoPath,
+    List<String>? imagePaths,
     String? createdAt,
     String? updatedAt,
     double? positionX,
     double? positionY,
     bool? clearDescription,
     bool? clearPhotoPath,
+    bool? clearImagePaths,
     bool? clearPosition,
   }) {
+    List<String>? finalImagePaths = imagePaths;
+    if (clearImagePaths == true) {
+      finalImagePaths = [];
+    } else if (imagePaths == null && photoPath != null) {
+      // If photoPath is provided but imagePaths is not, convert it
+      finalImagePaths = [photoPath];
+    } else if (imagePaths == null) {
+      finalImagePaths = this.imagePaths;
+    }
+    
     return Item(
       id: id ?? this.id,
       name: name ?? this.name,
@@ -145,6 +180,7 @@ class Item {
       photoPath: clearPhotoPath == true
           ? null
           : (photoPath ?? this.photoPath),
+      imagePaths: finalImagePaths,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? DateTime.now().toIso8601String(),
       positionX: clearPosition == true

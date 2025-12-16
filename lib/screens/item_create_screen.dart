@@ -10,7 +10,7 @@ import '../utils/file_utils.dart';
 
 /// Item Create/Edit Screen
 /// 
-/// Allows users to create or edit items with photo, tags, and image recognition.
+/// Allows users to create or edit items with multiple photos, tags, and image recognition.
 class ItemCreateScreen extends StatefulWidget {
   final String containerId;
   final Item? item;
@@ -31,7 +31,7 @@ class _ItemCreateScreenState extends State<ItemCreateScreen> {
   final _descriptionController = TextEditingController();
   final _tagsController = TextEditingController();
 
-  String? _photoPath;
+  List<String> _imagePaths = [];
   bool _isLoading = false;
   bool _isProcessingImage = false;
   List<String> _suggestedTags = [];
@@ -43,7 +43,10 @@ class _ItemCreateScreenState extends State<ItemCreateScreen> {
       _nameController.text = widget.item!.name;
       _descriptionController.text = widget.item!.description ?? '';
       _tagsController.text = widget.item!.tags.join(', ');
-      _photoPath = widget.item!.photoPath;
+      // Use imagePaths if available, otherwise fall back to photoPath for migration
+      _imagePaths = widget.item!.imagePaths.isNotEmpty
+          ? List.from(widget.item!.imagePaths)
+          : (widget.item!.photoPath != null ? [widget.item!.photoPath!] : []);
     }
   }
 
@@ -97,7 +100,7 @@ class _ItemCreateScreenState extends State<ItemCreateScreen> {
 
         if (savedPath != null) {
           setState(() {
-            _photoPath = savedPath;
+            _imagePaths.add(savedPath);
           });
 
           // Process image for tag suggestions
@@ -133,6 +136,12 @@ class _ItemCreateScreenState extends State<ItemCreateScreen> {
         });
       }
     }
+  }
+
+  void _removeImage(int index) {
+    setState(() {
+      _imagePaths.removeAt(index);
+    });
   }
 
   void _showTagSuggestions(List<String> suggestions) {
@@ -211,7 +220,7 @@ class _ItemCreateScreenState extends State<ItemCreateScreen> {
           description: _descriptionController.text.isEmpty
               ? null
               : _descriptionController.text,
-          photoPath: _photoPath,
+          imagePaths: _imagePaths,
           tags: tags,
         );
         await ItemService.updateItem(updated);
@@ -224,7 +233,7 @@ class _ItemCreateScreenState extends State<ItemCreateScreen> {
               : _descriptionController.text,
           containerId: widget.containerId,
           tags: tags,
-          photoPath: _photoPath,
+          imagePaths: _imagePaths,
         );
         await ItemService.createItem(item);
       }
@@ -272,83 +281,159 @@ class _ItemCreateScreenState extends State<ItemCreateScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // Photo Section
-            GestureDetector(
-              onTap: _pickImage,
-              child: Container(
-                height: 200,
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: theme.colorScheme.outline,
-                    width: 2,
-                    strokeAlign: BorderSide.strokeAlignInside,
+            // Images Section
+            Text(
+              'Images (${_imagePaths.length})',
+              style: theme.textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            if (_imagePaths.isEmpty)
+              GestureDetector(
+                onTap: _pickImage,
+                child: Container(
+                  height: 200,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: theme.colorScheme.outline,
+                      width: 2,
+                      strokeAlign: BorderSide.strokeAlignInside,
+                    ),
                   ),
-                ),
-                child: _isProcessingImage
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const CircularProgressIndicator(),
-                            const SizedBox(height: 16),
-                            Text(
-                              'Processing image...',
-                              style: theme.textTheme.bodyMedium,
-                            ),
-                          ],
-                        ),
-                      )
-                    : _photoPath != null && File(_photoPath!).existsSync()
-                        ? ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: Stack(
-                              children: [
-                                Image.file(
-                                  File(_photoPath!),
-                                  fit: BoxFit.cover,
-                                  width: double.infinity,
-                                ),
-                                if (_suggestedTags.isNotEmpty)
-                                  Positioned(
-                                    top: 8,
-                                    right: 8,
-                                    child: Chip(
-                                      avatar: const Icon(Icons.auto_awesome, size: 16),
-                                      label: Text('${_suggestedTags.length} tags'),
-                                      backgroundColor: theme.colorScheme.primaryContainer,
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          )
-                        : Column(
+                  child: _isProcessingImage
+                      ? Center(
+                          child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(
-                                Icons.add_photo_alternate,
-                                size: 48,
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                              const SizedBox(height: 8),
+                              const CircularProgressIndicator(),
+                              const SizedBox(height: 16),
                               Text(
-                                'Tap to add photo',
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                '(AI will suggest tags)',
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
+                                'Processing image...',
+                                style: theme.textTheme.bodyMedium,
                               ),
                             ],
                           ),
+                        )
+                      : Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.add_photo_alternate,
+                              size: 48,
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Tap to add photo',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '(AI will suggest tags)',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                ),
+              )
+            else
+              SizedBox(
+                height: 200,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _imagePaths.length + 1,
+                  itemBuilder: (context, index) {
+                    if (index == _imagePaths.length) {
+                      // Add image button
+                      return Padding(
+                        padding: const EdgeInsets.only(left: 8),
+                        child: GestureDetector(
+                          onTap: _pickImage,
+                          child: Container(
+                            width: 200,
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: theme.colorScheme.outline,
+                                width: 2,
+                              ),
+                            ),
+                            child: _isProcessingImage
+                                ? const Center(
+                                    child: CircularProgressIndicator(),
+                                  )
+                                : Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.add_photo_alternate,
+                                        size: 48,
+                                        color: theme.colorScheme.onSurfaceVariant,
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        'Add Photo',
+                                        style: theme.textTheme.bodyMedium?.copyWith(
+                                          color: theme.colorScheme.onSurfaceVariant,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                          ),
+                        ),
+                      );
+                    }
+                    // Image with remove button
+                    return Padding(
+                      padding: EdgeInsets.only(
+                        left: index == 0 ? 0 : 8,
+                      ),
+                      child: Stack(
+                        children: [
+                          Container(
+                            width: 200,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: theme.colorScheme.outline,
+                                width: 2,
+                              ),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Image.file(
+                                File(_imagePaths[index]),
+                                fit: BoxFit.cover,
+                                height: 200,
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            top: 8,
+                            right: 8,
+                            child: CircleAvatar(
+                              backgroundColor: Colors.red,
+                              radius: 16,
+                              child: IconButton(
+                                icon: const Icon(Icons.close, size: 16, color: Colors.white),
+                                onPressed: () => _removeImage(index),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
               ),
-            ),
             const SizedBox(height: 24),
             // Name Field
             TextFormField(

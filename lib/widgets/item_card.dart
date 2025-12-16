@@ -41,12 +41,13 @@ class ItemCard extends StatelessWidget {
               child: _buildPhoto(context),
             ),
             // Item Info
-            Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
                   // Name
                   Text(
                     item.name,
@@ -81,22 +82,25 @@ class ItemCard extends StatelessWidget {
                   // Tags
                   if (item.tags.isNotEmpty) ...[
                     const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 4,
-                      runSpacing: 4,
-                      children: item.tags.take(3).map((tag) {
-                        return Chip(
-                          label: Text(
-                            tag,
-                            style: const TextStyle(fontSize: 10),
-                          ),
-                          padding: EdgeInsets.zero,
-                          visualDensity: VisualDensity.compact,
-                        );
-                      }).toList(),
+                    Flexible(
+                      child: Wrap(
+                        spacing: 4,
+                        runSpacing: 4,
+                        children: item.tags.take(3).map((tag) {
+                          return Chip(
+                            label: Text(
+                              tag,
+                              style: const TextStyle(fontSize: 10),
+                            ),
+                            padding: EdgeInsets.zero,
+                            visualDensity: VisualDensity.compact,
+                          );
+                        }).toList(),
+                      ),
                     ),
                   ],
                 ],
+                ),
               ),
             ),
           ],
@@ -106,14 +110,47 @@ class ItemCard extends StatelessWidget {
   }
 
   Widget _buildPhoto(BuildContext context) {
-    if (item.photoPath != null) {
-      return Image.file(
-        File(item.photoPath!),
-        fit: BoxFit.cover,
-        cacheWidth: 400, // Limit image resolution for better performance
-        errorBuilder: (context, error, stackTrace) {
-          return _buildPlaceholder(context);
-        },
+    // Use imagePaths if available, otherwise fall back to photoPath for migration
+    final imagePath = item.imagePaths.isNotEmpty
+        ? item.imagePaths.first
+        : item.photoPath;
+    
+    if (imagePath != null && File(imagePath).existsSync()) {
+      return Stack(
+        children: [
+          Image.file(
+            File(imagePath),
+            fit: BoxFit.cover,
+            cacheWidth: 400, // Limit image resolution for better performance
+            errorBuilder: (context, error, stackTrace) {
+              return _buildPlaceholder(context);
+            },
+          ),
+          // Show image count badge if multiple images
+          if (item.imagePaths.length > 1)
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.black54,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.photo_library, size: 14, color: Colors.white),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${item.imagePaths.length}',
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
       );
     }
     return _buildPlaceholder(context);
