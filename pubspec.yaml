@@ -71,9 +71,8 @@ dependencies:
   hive: ^2.2.3
   hive_flutter: ^1.1.0
 
-  # Image recognition (on-device ML) - disabled due to dependency conflicts
-  # Will be enabled in future update with compatible versions
-  # google_mlkit_image_labeling: ^0.14.1
+  # Image recognition (on-device ML)
+  google_mlkit_image_labeling: ^0.14.1
 
   # Image picker
   image_picker: ^1.0.7

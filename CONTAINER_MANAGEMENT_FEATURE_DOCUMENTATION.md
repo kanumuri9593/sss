@@ -826,12 +826,13 @@ bool canNestContainer(String containerId, String parentContainerId) {
 
 ### Google ML Kit Integration
 
-**Package:** `google_mlkit_image_labeling: ^0.11.0`
+**Package:** `google_mlkit_image_labeling: ^0.14.1`
 
 **Configuration:**
 - Model: Default ML Kit image labeling model
 - Confidence threshold: 0.5 (50%)
 - Processing: On-device only
+- Status: ✅ Enabled and fully functional
 
 **Label Format:**
 - Input: "Winter Jacket", "Clothing", "Outerwear"
@@ -980,7 +981,7 @@ hive: ^2.2.3
 hive_flutter: ^1.1.0
 
 # Image Recognition
-google_mlkit_image_labeling: ^0.11.0
+google_mlkit_image_labeling: ^0.14.1
 
 # Image Picker
 image_picker: ^1.0.7
