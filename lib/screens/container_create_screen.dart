@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as path;
@@ -9,6 +10,8 @@ import '../services/container_service.dart';
 import '../services/qr_service.dart';
 import '../models/qr_data.dart';
 import '../utils/file_utils.dart';
+import '../services/image_recognition_service.dart';
+import '../widgets/tag_editor_widget.dart';
 
 /// Container Create/Edit Screen
 /// 
@@ -30,13 +33,13 @@ class _ContainerCreateScreenState extends State<ContainerCreateScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _descriptionController = TextEditingController();
-  final _tagsController = TextEditingController();
   final _qrRepaintKey = GlobalKey();
 
   models.ContainerType _selectedType = models.ContainerType.box;
   String? _photoPath;
   String? _selectedParentContainerId;
   bool _isLoading = false;
+  bool _isProcessingImage = false;
   models.Container? _createdContainer;
   String? _qrDeepLink;
   String? _qrId;
@@ -46,14 +49,18 @@ class _ContainerCreateScreenState extends State<ContainerCreateScreen> {
   Color _qrIdentifierColor = Colors.black;
 
   List<models.Container> _availableParents = [];
+  List<String> _tags = [];
 
   @override
   void initState() {
     super.initState();
+    // Initialize image recognition service
+    ImageRecognitionService.initialize();
+    
     if (widget.container != null) {
       _nameController.text = widget.container!.name;
       _descriptionController.text = widget.container!.description ?? '';
-      _tagsController.text = widget.container!.tags.join(', ');
+      _tags = List.from(widget.container!.tags);
       _selectedType = widget.container!.type;
       _photoPath = widget.container!.photoPath;
       _selectedParentContainerId = widget.container!.parentContainerId;
@@ -67,7 +74,6 @@ class _ContainerCreateScreenState extends State<ContainerCreateScreen> {
   void dispose() {
     _nameController.dispose();
     _descriptionController.dispose();
-    _tagsController.dispose();
     super.dispose();
   }
 
@@ -159,6 +165,10 @@ class _ContainerCreateScreenState extends State<ContainerCreateScreen> {
     if (source == null) return;
 
     try {
+      setState(() {
+        _isProcessingImage = true;
+      });
+
       final pickedFile = await picker.pickImage(source: source);
       if (pickedFile != null) {
         final fileName =
@@ -171,6 +181,52 @@ class _ContainerCreateScreenState extends State<ContainerCreateScreen> {
           setState(() {
             _photoPath = savedPath;
           });
+
+          // Auto-generate tags from image
+          try {
+            final generatedTags = await ImageRecognitionService.processImage(savedPath);
+            
+            // Also add container type-based tags if not already present
+            final containerTypeTags = ImageRecognitionService.generateTagsForContainer(_selectedType);
+            
+            // Merge tags (avoid duplicates)
+            final allTags = <String>[];
+            for (final tag in generatedTags) {
+              if (!allTags.any((t) => t.toLowerCase() == tag.toLowerCase())) {
+                allTags.add(tag);
+              }
+            }
+            for (final tag in containerTypeTags) {
+              if (!allTags.any((t) => t.toLowerCase() == tag.toLowerCase())) {
+                allTags.add(tag);
+              }
+            }
+            
+            // Merge with existing tags
+            final updatedTags = List<String>.from(_tags);
+            for (final tag in allTags.take(5)) {
+              if (!updatedTags.any((t) => t.toLowerCase() == tag.toLowerCase())) {
+                updatedTags.add(tag);
+              }
+            }
+
+            setState(() {
+              _tags = updatedTags;
+            });
+          } catch (e) {
+            debugPrint('Error generating tags: $e');
+            // Fallback: add container type tags
+            final containerTypeTags = ImageRecognitionService.generateTagsForContainer(_selectedType);
+            final updatedTags = List<String>.from(_tags);
+            for (final tag in containerTypeTags) {
+              if (!updatedTags.any((t) => t.toLowerCase() == tag.toLowerCase())) {
+                updatedTags.add(tag);
+              }
+            }
+            setState(() {
+              _tags = updatedTags;
+            });
+          }
         }
       }
     } catch (e) {
@@ -178,6 +234,12 @@ class _ContainerCreateScreenState extends State<ContainerCreateScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error picking image: $e')),
         );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProcessingImage = false;
+        });
       }
     }
   }
@@ -190,12 +252,6 @@ class _ContainerCreateScreenState extends State<ContainerCreateScreen> {
     });
 
     try {
-      final tags = _tagsController.text
-          .split(',')
-          .map((t) => t.trim())
-          .where((t) => t.isNotEmpty)
-          .toList();
-
       if (widget.container != null) {
         // Update existing container
         final updated = widget.container!.copyWith(
@@ -206,7 +262,7 @@ class _ContainerCreateScreenState extends State<ContainerCreateScreen> {
           type: _selectedType,
           photoPath: _photoPath,
           parentContainerId: _selectedParentContainerId,
-          tags: tags,
+          tags: _tags,
         );
         await ContainerService.updateContainer(updated);
         _createdContainer = updated;
@@ -220,7 +276,7 @@ class _ContainerCreateScreenState extends State<ContainerCreateScreen> {
           description: _descriptionController.text.isEmpty
               ? null
               : _descriptionController.text,
-          tags: tags,
+          tags: _tags,
         );
         await ContainerService.createContainer(container);
         _createdContainer = container;
@@ -499,15 +555,26 @@ class _ContainerCreateScreenState extends State<ContainerCreateScreen> {
               maxLines: 3,
             ),
             const SizedBox(height: 16),
-            // Tags Field
-            TextFormField(
-              controller: _tagsController,
-              decoration: const InputDecoration(
-                labelText: 'Tags',
-                hintText: 'Comma-separated tags (e.g., winter, clothes, storage)',
-                helperText: 'Separate tags with commas',
-              ),
+            // Tags Field with TagEditorWidget
+            TagEditorWidget(
+              tags: _tags,
+              onTagsChanged: (tags) {
+                setState(() {
+                  _tags = tags;
+                });
+              },
+              labelText: 'Tags',
+              hintText: 'Comma-separated tags (e.g., winter, clothes, storage)',
+              helperText: _isProcessingImage
+                  ? 'Processing image and generating tags...'
+                  : 'Tags will be auto-generated when you add a photo. Separate tags with commas.',
             ),
+            if (_isProcessingImage) ...[
+              const SizedBox(height: 8),
+              const Center(
+                child: CircularProgressIndicator(),
+              ),
+            ],
             const SizedBox(height: 24),
             // Save Button
             ElevatedButton(

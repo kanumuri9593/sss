@@ -11,7 +11,9 @@ class ItemService {
     try {
       final box = StorageService.itemsBox;
       await box.put(item.id, item);
-      debugPrint('[ItemService] Created item: ${item.id}');
+      // Ensure data is persisted to disk
+      await box.flush();
+      debugPrint('[ItemService] Created item: ${item.id} (total: ${box.length})');
       return item;
     } catch (e) {
       debugPrint('[ItemService] Error creating item: $e');
@@ -66,6 +68,8 @@ class ItemService {
         updatedAt: DateTime.now().toIso8601String(),
       );
       await box.put(item.id, updated);
+      // Ensure data is persisted to disk
+      await box.flush();
       debugPrint('[ItemService] Updated item: ${item.id}');
       return updated;
     } catch (e) {
@@ -83,6 +87,8 @@ class ItemService {
         return false;
       }
       await box.delete(id);
+      // Ensure deletion is persisted to disk
+      await box.flush();
       debugPrint('[ItemService] Deleted item: $id');
       return true;
     } catch (e) {

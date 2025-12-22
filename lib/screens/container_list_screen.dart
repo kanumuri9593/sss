@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/container.dart' as models;
 import '../services/container_service.dart';
 import '../services/item_service.dart';
+import '../services/storage_service.dart';
 import '../widgets/container_card.dart';
 import 'container_detail_screen.dart';
 import 'container_create_screen.dart';
@@ -17,7 +18,7 @@ class ContainerListScreen extends StatefulWidget {
   State<ContainerListScreen> createState() => _ContainerListScreenState();
 }
 
-class _ContainerListScreenState extends State<ContainerListScreen> {
+class _ContainerListScreenState extends State<ContainerListScreen> with WidgetsBindingObserver {
   final TextEditingController _searchController = TextEditingController();
   List<models.Container> _containers = [];
   List<models.Container> _filteredContainers = [];
@@ -27,22 +28,73 @@ class _ContainerListScreenState extends State<ContainerListScreen> {
   @override
   void initState() {
     super.initState();
-    _loadContainers();
+    WidgetsBinding.instance.addObserver(this);
     _searchController.addListener(_onSearchChanged);
+    // Load containers after a short delay to ensure storage is initialized
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadContainers();
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Reload data when dependencies change (e.g., when tab becomes visible)
+    // This ensures data is fresh when navigating back to this tab
+    if (StorageService.isInitialized && _containers.isEmpty) {
+      _loadContainers();
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _searchDebounceTimer?.cancel();
     _searchController.dispose();
     super.dispose();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Reload data when app comes back to foreground
+    if (state == AppLifecycleState.resumed) {
+      _loadContainers();
+    }
+  }
+
   void _loadContainers() {
-    setState(() {
-      _containers = ContainerService.getAllContainers();
-      _filteredContainers = _containers;
-    });
+    try {
+      // Ensure storage is initialized
+      if (!StorageService.isInitialized) {
+        debugPrint('[ContainerListScreen] Storage not initialized, skipping load');
+        return;
+      }
+
+      final containers = ContainerService.getAllContainers();
+      debugPrint('[ContainerListScreen] Loaded ${containers.length} containers');
+      
+      if (mounted) {
+        setState(() {
+          _containers = containers;
+          // Reapply search filter if active
+          if (_searchController.text.isEmpty) {
+            _filteredContainers = _containers;
+          } else {
+            _filteredContainers = ContainerService.searchContainers(_searchController.text);
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('[ContainerListScreen] Error loading containers: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading containers: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   void _onSearchChanged() {
@@ -66,25 +118,25 @@ class _ContainerListScreenState extends State<ContainerListScreen> {
   }
 
   void _navigateToCreate() async {
-    final result = await Navigator.of(context).push(
+    await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => const ContainerCreateScreen(),
       ),
     );
-    if (result == true) {
-      _refreshContainers();
-    }
+    // Always reload when returning from create screen
+    // to ensure we have the latest data
+    _refreshContainers();
   }
 
   void _navigateToDetail(models.Container container) async {
-    final result = await Navigator.of(context).push(
+    await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => ContainerDetailScreen(containerId: container.id),
       ),
     );
-    if (result == true) {
-      _refreshContainers();
-    }
+    // Always reload when returning from detail screen
+    // to ensure we have the latest data (in case container was deleted/updated)
+    _refreshContainers();
   }
 
   @override

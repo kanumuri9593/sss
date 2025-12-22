@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import '../models/container.dart' as models;
 import '../models/item.dart';
+import '../models/qr_data.dart';
 import '../services/container_service.dart';
 import '../services/item_service.dart';
+import '../services/qr_service.dart';
 import 'item_create_screen.dart';
 import 'container_create_screen.dart';
 
@@ -267,6 +270,11 @@ class _ContainerDetailScreenState extends State<ContainerDetailScreen> {
       appBar: AppBar(
         title: Text(_container!.name),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.qr_code),
+            onPressed: _showQRCode,
+            tooltip: 'View QR Code',
+          ),
           IconButton(
             icon: const Icon(Icons.edit),
             onPressed: _editContainer,
@@ -589,6 +597,71 @@ class _ContainerDetailScreenState extends State<ContainerDetailScreen> {
     );
   }
 
+  Future<void> _showQRCode() async {
+    if (_container == null) return;
+
+    // Ensure container has a QR code
+    String? qrId = _container!.qrCodeId;
+    String qrDeepLink;
+    String qrCustomIdentifier = '';
+    Color qrForegroundColor = Colors.black;
+    Color qrBackgroundColor = Colors.white;
+    Color qrIdentifierColor = Colors.black;
+
+    // Load existing QR code or generate new one
+    if (qrId != null) {
+      final qrData = QRService.getQRDataById(qrId);
+      if (qrData != null) {
+        qrDeepLink = qrData.buildDeepLink();
+        qrCustomIdentifier = qrData.customIdentifier ?? '';
+      } else {
+        // QR data not found, generate new one
+        final deepLink = _container!.buildDeepLink();
+        qrDeepLink = QRService.generateDeepLink(
+          data: deepLink,
+          category: 'Container',
+        );
+        qrId = QRData.extractIdFromDeepLink(qrDeepLink);
+        if (qrId != null) {
+          await ContainerService.linkQRCode(_container!.id, qrId);
+          // Reload container to get updated QR code ID
+          _loadContainer();
+        }
+      }
+    } else {
+      // No QR code exists, generate one
+      final deepLink = _container!.buildDeepLink();
+      qrDeepLink = QRService.generateDeepLink(
+        data: deepLink,
+        category: 'Container',
+      );
+      qrId = QRData.extractIdFromDeepLink(qrDeepLink);
+      if (qrId != null) {
+        await ContainerService.linkQRCode(_container!.id, qrId);
+        // Reload container to get updated QR code ID
+        _loadContainer();
+      }
+    }
+
+    // Show QR code in a dialog
+    if (mounted) {
+      await showDialog(
+        context: context,
+        builder: (context) => _QRCodeDialog(
+          container: _container!,
+          qrDeepLink: qrDeepLink,
+          qrCustomIdentifier: qrCustomIdentifier,
+          qrForegroundColor: qrForegroundColor,
+          qrBackgroundColor: qrBackgroundColor,
+          qrIdentifierColor: qrIdentifierColor,
+          onQRUpdated: () {
+            _loadContainer();
+          },
+        ),
+      );
+    }
+  }
+
   Future<void> _deleteContainer() async {
     if (_container == null) return;
 
@@ -628,5 +701,472 @@ class _ContainerDetailScreenState extends State<ContainerDetailScreen> {
         );
       }
     }
+  }
+}
+
+/// Dialog for displaying and managing container QR code
+class _QRCodeDialog extends StatefulWidget {
+  final models.Container container;
+  final String qrDeepLink;
+  final String qrCustomIdentifier;
+  final Color qrForegroundColor;
+  final Color qrBackgroundColor;
+  final Color qrIdentifierColor;
+  final VoidCallback onQRUpdated;
+
+  const _QRCodeDialog({
+    required this.container,
+    required this.qrDeepLink,
+    required this.qrCustomIdentifier,
+    required this.qrForegroundColor,
+    required this.qrBackgroundColor,
+    required this.qrIdentifierColor,
+    required this.onQRUpdated,
+  });
+
+  @override
+  State<_QRCodeDialog> createState() => _QRCodeDialogState();
+}
+
+class _QRCodeDialogState extends State<_QRCodeDialog> {
+  late String _qrDeepLink;
+  late String _qrCustomIdentifier;
+  late Color _qrForegroundColor;
+  late Color _qrBackgroundColor;
+  late Color _qrIdentifierColor;
+  final _qrRepaintKey = GlobalKey();
+
+  @override
+  void initState() {
+    super.initState();
+    _qrDeepLink = widget.qrDeepLink;
+    _qrCustomIdentifier = widget.qrCustomIdentifier;
+    _qrForegroundColor = widget.qrForegroundColor;
+    _qrBackgroundColor = widget.qrBackgroundColor;
+    _qrIdentifierColor = widget.qrIdentifierColor;
+  }
+
+  Future<void> _editQRCode() async {
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => _QREditDialog(
+        customIdentifier: _qrCustomIdentifier,
+        foregroundColor: _qrForegroundColor,
+        backgroundColor: _qrBackgroundColor,
+        identifierColor: _qrIdentifierColor,
+      ),
+    );
+
+    if (result != null) {
+      setState(() {
+        _qrCustomIdentifier = result['customIdentifier'] ?? '';
+        _qrForegroundColor = result['foregroundColor'] ?? Colors.black;
+        _qrBackgroundColor = result['backgroundColor'] ?? Colors.white;
+        _qrIdentifierColor = result['identifierColor'] ?? Colors.black;
+      });
+      // Regenerate QR with new settings
+      _regenerateQRCode();
+    }
+  }
+
+  void _regenerateQRCode() {
+    final deepLink = widget.container.buildDeepLink();
+    _qrDeepLink = QRService.generateDeepLink(
+      data: deepLink,
+      category: 'Container',
+      customIdentifier: _qrCustomIdentifier.isEmpty ? null : _qrCustomIdentifier,
+    );
+    
+    final qrId = QRData.extractIdFromDeepLink(_qrDeepLink);
+    if (qrId != null) {
+      ContainerService.linkQRCode(widget.container.id, qrId);
+      widget.onQRUpdated();
+    }
+  }
+
+  Future<void> _downloadQRCode() async {
+    try {
+      final imageBytes = await QRService.captureWidgetToImage(
+        repaintBoundaryKey: _qrRepaintKey,
+        pixelRatio: 3.0,
+      );
+
+      if (imageBytes == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Failed to capture QR code')),
+          );
+        }
+        return;
+      }
+
+      final fileName = 'container_${widget.container.name}_qr_${DateTime.now().millisecondsSinceEpoch}.png';
+      final filePath = await QRService.exportAsPNG(
+        imageBytes: imageBytes,
+        fileName: fileName,
+      );
+
+      if (filePath != null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('QR code saved to $filePath')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error downloading QR code: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _shareQRCode() async {
+    try {
+      final imageBytes = await QRService.captureWidgetToImage(
+        repaintBoundaryKey: _qrRepaintKey,
+        pixelRatio: 3.0,
+      );
+
+      if (imageBytes == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Failed to capture QR code')),
+          );
+        }
+        return;
+      }
+
+      final fileName = 'container_${widget.container.name}_qr.png';
+      final filePath = await QRService.exportAsPNG(
+        imageBytes: imageBytes,
+        fileName: fileName,
+      );
+
+      if (filePath != null) {
+        await QRService.shareFile(
+          filePath: filePath,
+          subject: 'QR Code for ${widget.container.name}',
+          text: 'QR Code for container: ${widget.container.name}',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error sharing QR code: $e')),
+        );
+      }
+    }
+  }
+
+  Widget _buildQRWidget({double size = 250}) {
+    final qrWidget = QrImageView(
+      data: _qrDeepLink,
+      size: size,
+      backgroundColor: _qrBackgroundColor,
+      foregroundColor: _qrForegroundColor,
+      errorCorrectionLevel: QrErrorCorrectLevel.M,
+    );
+    
+    if (_qrCustomIdentifier.isEmpty) {
+      return qrWidget;
+    }
+    
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        qrWidget,
+        Container(
+          width: size * 0.2,
+          height: size * 0.2,
+          decoration: BoxDecoration(
+            color: _qrBackgroundColor,
+            shape: BoxShape.circle,
+          ),
+          child: Center(
+            child: Text(
+              _qrCustomIdentifier,
+              style: TextStyle(
+                fontSize: _qrCustomIdentifier.length > 1 ? size * 0.15 : size * 0.12,
+                fontWeight: FontWeight.bold,
+                color: _qrIdentifierColor,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    
+    return Dialog(
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        constraints: const BoxConstraints(maxWidth: 400),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Container QR Code',
+                style: theme.textTheme.titleLarge,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Scan this QR code to quickly access this container',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              Center(
+                child: RepaintBoundary(
+                  key: _qrRepaintKey,
+                  child: _buildQRWidget(size: 250),
+                ),
+              ),
+              const SizedBox(height: 24),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: _editQRCode,
+                    icon: const Icon(Icons.edit),
+                    label: const Text('Edit QR'),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: _downloadQRCode,
+                    icon: const Icon(Icons.download),
+                    label: const Text('Download'),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: _shareQRCode,
+                    icon: const Icon(Icons.share),
+                    label: const Text('Share'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Close'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Dialog for editing QR code appearance
+class _QREditDialog extends StatefulWidget {
+  final String customIdentifier;
+  final Color foregroundColor;
+  final Color backgroundColor;
+  final Color identifierColor;
+
+  const _QREditDialog({
+    required this.customIdentifier,
+    required this.foregroundColor,
+    required this.backgroundColor,
+    required this.identifierColor,
+  });
+
+  @override
+  State<_QREditDialog> createState() => _QREditDialogState();
+}
+
+class _QREditDialogState extends State<_QREditDialog> {
+  late TextEditingController _identifierController;
+  late Color _foregroundColor;
+  late Color _backgroundColor;
+  late Color _identifierColor;
+
+  @override
+  void initState() {
+    super.initState();
+    _identifierController = TextEditingController(text: widget.customIdentifier);
+    _foregroundColor = widget.foregroundColor;
+    _backgroundColor = widget.backgroundColor;
+    _identifierColor = widget.identifierColor;
+  }
+
+  @override
+  void dispose() {
+    _identifierController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Edit QR Code'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _identifierController,
+              decoration: const InputDecoration(
+                labelText: 'Custom Identifier (Letter/Emoji)',
+                hintText: 'e.g., A, 📦, etc.',
+                helperText: 'Optional: Add a letter or emoji in the center',
+              ),
+              maxLength: 2,
+            ),
+            const SizedBox(height: 16),
+            ListTile(
+              title: const Text('Foreground Color'),
+              trailing: _ColorPickerButton(
+                color: _foregroundColor,
+                onColorChanged: (color) {
+                  setState(() {
+                    _foregroundColor = color;
+                  });
+                },
+              ),
+            ),
+            ListTile(
+              title: const Text('Background Color'),
+              trailing: _ColorPickerButton(
+                color: _backgroundColor,
+                onColorChanged: (color) {
+                  setState(() {
+                    _backgroundColor = color;
+                  });
+                },
+              ),
+            ),
+            ListTile(
+              title: const Text('Identifier Color'),
+              trailing: _ColorPickerButton(
+                color: _identifierColor,
+                onColorChanged: (color) {
+                  setState(() {
+                    _identifierColor = color;
+                  });
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            Navigator.pop(context, {
+              'customIdentifier': _identifierController.text,
+              'foregroundColor': _foregroundColor,
+              'backgroundColor': _backgroundColor,
+              'identifierColor': _identifierColor,
+            });
+          },
+          child: const Text('Apply'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Simple color picker button
+class _ColorPickerButton extends StatelessWidget {
+  final Color color;
+  final ValueChanged<Color> onColorChanged;
+
+  const _ColorPickerButton({
+    required this.color,
+    required this.onColorChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        showDialog(
+          context: context,
+          builder: (context) => _ColorPickerDialog(
+            initialColor: color,
+            onColorSelected: onColorChanged,
+          ),
+        );
+      },
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: color,
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.grey, width: 2),
+        ),
+      ),
+    );
+  }
+}
+
+/// Color picker dialog
+class _ColorPickerDialog extends StatelessWidget {
+  final Color initialColor;
+  final ValueChanged<Color> onColorSelected;
+
+  const _ColorPickerDialog({
+    required this.initialColor,
+    required this.onColorSelected,
+  });
+
+  final List<Color> _colors = const [
+    Colors.black,
+    Colors.white,
+    Colors.red,
+    Colors.blue,
+    Colors.green,
+    Colors.orange,
+    Colors.purple,
+    Colors.teal,
+    Colors.pink,
+    Colors.brown,
+    Colors.grey,
+    Colors.amber,
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Select Color'),
+      content: Wrap(
+        spacing: 16,
+        runSpacing: 16,
+        children: _colors.map((color) {
+          return GestureDetector(
+            onTap: () {
+              onColorSelected(color);
+              Navigator.pop(context);
+            },
+            child: Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(
+                color: color,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: initialColor == color ? Colors.black : Colors.grey,
+                  width: initialColor == color ? 3 : 1,
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
   }
 }

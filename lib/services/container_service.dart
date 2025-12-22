@@ -14,7 +14,9 @@ class ContainerService {
     try {
       final box = StorageService.containersBox;
       await box.put(container.id, container);
-      debugPrint('[ContainerService] Created container: ${container.id}');
+      // Ensure data is persisted to disk
+      await box.flush();
+      debugPrint('[ContainerService] Created container: ${container.id} (total: ${box.length})');
       return container;
     } catch (e) {
       debugPrint('[ContainerService] Error creating container: $e');
@@ -37,7 +39,9 @@ class ContainerService {
   static List<Container> getAllContainers() {
     try {
       final box = StorageService.containersBox;
-      return box.values.toList();
+      final containers = box.values.toList();
+      debugPrint('[ContainerService] Retrieved ${containers.length} containers from storage');
+      return containers;
     } catch (e) {
       debugPrint('[ContainerService] Error getting all containers: $e');
       return [];
@@ -82,6 +86,8 @@ class ContainerService {
         updatedAt: DateTime.now().toIso8601String(),
       );
       await box.put(container.id, updated);
+      // Ensure data is persisted to disk
+      await box.flush();
       debugPrint('[ContainerService] Updated container: ${container.id}');
       return updated;
     } catch (e) {
@@ -118,6 +124,8 @@ class ContainerService {
 
       // Delete the container itself
       await box.delete(id);
+      // Ensure deletion is persisted to disk
+      await box.flush();
       debugPrint('[ContainerService] Deleted container: $id');
       return true;
     } catch (e) {

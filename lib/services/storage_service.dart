@@ -37,6 +37,8 @@ class StorageService {
       _itemsBox = await Hive.openBox<Item>(_itemsBoxName);
 
       debugPrint('[Storage] Hive initialized successfully');
+      debugPrint('[Storage] Containers box: ${_containersBox!.length} items');
+      debugPrint('[Storage] Items box: ${_itemsBox!.length} items');
     } catch (e) {
       debugPrint('[Storage] Error initializing Hive: $e');
       rethrow;

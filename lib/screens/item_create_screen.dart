@@ -7,6 +7,7 @@ import '../services/item_service.dart';
 import '../services/image_recognition_service.dart';
 import '../services/container_service.dart';
 import '../utils/file_utils.dart';
+import '../widgets/tag_editor_widget.dart';
 
 /// Item Create/Edit Screen
 /// 
@@ -29,20 +30,22 @@ class _ItemCreateScreenState extends State<ItemCreateScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _descriptionController = TextEditingController();
-  final _tagsController = TextEditingController();
 
   List<String> _imagePaths = [];
   bool _isLoading = false;
   bool _isProcessingImage = false;
-  List<String> _suggestedTags = [];
+  List<String> _tags = [];
 
   @override
   void initState() {
     super.initState();
+    // Initialize image recognition service
+    ImageRecognitionService.initialize();
+    
     if (widget.item != null) {
       _nameController.text = widget.item!.name;
       _descriptionController.text = widget.item!.description ?? '';
-      _tagsController.text = widget.item!.tags.join(', ');
+      _tags = List.from(widget.item!.tags);
       // Use imagePaths if available, otherwise fall back to photoPath for migration
       _imagePaths = widget.item!.imagePaths.isNotEmpty
           ? List.from(widget.item!.imagePaths)
@@ -54,7 +57,6 @@ class _ItemCreateScreenState extends State<ItemCreateScreen> {
   void dispose() {
     _nameController.dispose();
     _descriptionController.dispose();
-    _tagsController.dispose();
     super.dispose();
   }
 
@@ -103,21 +105,21 @@ class _ItemCreateScreenState extends State<ItemCreateScreen> {
             _imagePaths.add(savedPath);
           });
 
-          // Process image for tag suggestions
+          // Auto-generate and add tags from image
           try {
-            final suggestions =
-                await ImageRecognitionService.getTopTagSuggestions(savedPath, 10);
-            setState(() {
-              _suggestedTags = suggestions;
-            });
-
-            // Auto-add suggested tags if no tags exist
-            if (_tagsController.text.isEmpty && suggestions.isNotEmpty) {
-              _tagsController.text = suggestions.take(5).join(', ');
-            } else if (_tagsController.text.isNotEmpty && suggestions.isNotEmpty) {
-              // Show suggestions dialog
-              _showTagSuggestions(suggestions);
+            final generatedTags = await ImageRecognitionService.processImage(savedPath);
+            
+            // Merge with existing tags (avoid duplicates)
+            final updatedTags = List<String>.from(_tags);
+            for (final tag in generatedTags.take(5)) {
+              if (!updatedTags.any((t) => t.toLowerCase() == tag.toLowerCase())) {
+                updatedTags.add(tag);
+              }
             }
+
+            setState(() {
+              _tags = updatedTags;
+            });
           } catch (e) {
             debugPrint('Error processing image: $e');
           }
@@ -144,55 +146,6 @@ class _ItemCreateScreenState extends State<ItemCreateScreen> {
     });
   }
 
-  void _showTagSuggestions(List<String> suggestions) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Suggested Tags'),
-        content: Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: suggestions.map((tag) {
-            final isIncluded = _tagsController.text
-                .split(',')
-                .any((t) => t.trim().toLowerCase() == tag.toLowerCase());
-            return FilterChip(
-              label: Text(tag),
-              selected: isIncluded,
-              onSelected: (selected) {
-                final currentTags = _tagsController.text
-                    .split(',')
-                    .map((t) => t.trim())
-                    .where((t) => t.isNotEmpty)
-                    .toList();
-
-                if (selected) {
-                  if (!currentTags.any(
-                      (t) => t.toLowerCase() == tag.toLowerCase())) {
-                    currentTags.add(tag);
-                  }
-                } else {
-                  currentTags.removeWhere(
-                      (t) => t.toLowerCase() == tag.toLowerCase());
-                }
-
-                _tagsController.text = currentTags.join(', ');
-                Navigator.pop(context);
-                setState(() {});
-              },
-            );
-          }).toList(),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Done'),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _saveItem() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -201,11 +154,6 @@ class _ItemCreateScreenState extends State<ItemCreateScreen> {
     });
 
     try {
-      final tags = _tagsController.text
-          .split(',')
-          .map((t) => t.trim())
-          .where((t) => t.isNotEmpty)
-          .toList();
 
       // Verify container exists
       final container = ContainerService.getContainer(widget.containerId);
@@ -221,7 +169,7 @@ class _ItemCreateScreenState extends State<ItemCreateScreen> {
               ? null
               : _descriptionController.text,
           imagePaths: _imagePaths,
-          tags: tags,
+          tags: _tags,
         );
         await ItemService.updateItem(updated);
       } else {
@@ -232,7 +180,7 @@ class _ItemCreateScreenState extends State<ItemCreateScreen> {
               ? null
               : _descriptionController.text,
           containerId: widget.containerId,
-          tags: tags,
+          tags: _tags,
           imagePaths: _imagePaths,
         );
         await ItemService.createItem(item);
@@ -332,7 +280,7 @@ class _ItemCreateScreenState extends State<ItemCreateScreen> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              '(AI will suggest tags)',
+                              '(AI will auto-generate tags)',
                               style: theme.textTheme.bodySmall?.copyWith(
                                 color: theme.colorScheme.onSurfaceVariant,
                               ),
@@ -460,56 +408,24 @@ class _ItemCreateScreenState extends State<ItemCreateScreen> {
               maxLines: 3,
             ),
             const SizedBox(height: 16),
-            // Tags Field
-            TextFormField(
-              controller: _tagsController,
-              decoration: InputDecoration(
-                labelText: 'Tags',
-                hintText: 'Comma-separated tags',
-                helperText: 'Separate tags with commas. AI suggestions will appear after adding a photo.',
-                suffixIcon: _suggestedTags.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.auto_awesome),
-                        tooltip: 'View AI suggestions',
-                        onPressed: () => _showTagSuggestions(_suggestedTags),
-                      )
-                    : null,
-              ),
+            // Tags Field with TagEditorWidget
+            TagEditorWidget(
+              tags: _tags,
+              onTagsChanged: (tags) {
+                setState(() {
+                  _tags = tags;
+                });
+              },
+              labelText: 'Tags',
+              hintText: 'Comma-separated tags',
+              helperText: _isProcessingImage
+                  ? 'Processing image and generating tags...'
+                  : 'Tags will be auto-generated when you add a photo. Separate tags with commas.',
             ),
-            if (_suggestedTags.isNotEmpty) ...[
+            if (_isProcessingImage) ...[
               const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _suggestedTags.take(5).map((tag) {
-                  final isIncluded = _tagsController.text
-                      .split(',')
-                      .any((t) => t.trim().toLowerCase() == tag.toLowerCase());
-                  return FilterChip(
-                    label: Text(tag),
-                    selected: isIncluded,
-                    onSelected: (selected) {
-                      final currentTags = _tagsController.text
-                          .split(',')
-                          .map((t) => t.trim())
-                          .where((t) => t.isNotEmpty)
-                          .toList();
-
-                      if (selected) {
-                        if (!currentTags.any(
-                            (t) => t.toLowerCase() == tag.toLowerCase())) {
-                          currentTags.add(tag);
-                        }
-                      } else {
-                        currentTags.removeWhere(
-                            (t) => t.toLowerCase() == tag.toLowerCase());
-                      }
-
-                      _tagsController.text = currentTags.join(', ');
-                      setState(() {});
-                    },
-                  );
-                }).toList(),
+              const Center(
+                child: CircularProgressIndicator(),
               ),
             ],
             const SizedBox(height: 24),

@@ -211,3 +211,6 @@ class NFCDetailScreen extends StatelessWidget {
 
 
 
+
+
+

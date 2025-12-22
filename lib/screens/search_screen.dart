@@ -369,38 +369,37 @@ class _SearchScreenState extends State<SearchScreen> {
                                   style: theme.textTheme.titleLarge,
                                 ),
                                 const SizedBox(height: 8),
-                                GridView.builder(
-                                  shrinkWrap: true,
-                                  physics: const NeverScrollableScrollPhysics(),
-                                  gridDelegate:
-                                      const SliverGridDelegateWithFixedCrossAxisCount(
-                                    crossAxisCount: 2,
-                                    childAspectRatio: 0.75,
-                                    crossAxisSpacing: 8,
-                                    mainAxisSpacing: 8,
+                                SizedBox(
+                                  height: 200,
+                                  child: ListView.builder(
+                                    scrollDirection: Axis.horizontal,
+                                    itemCount: _itemResults.length,
+                                    itemBuilder: (context, index) {
+                                      final item = _itemResults[index];
+                                      final container = ContainerService
+                                          .getContainer(item.containerId);
+                                      return SizedBox(
+                                        width: 160,
+                                        child: ItemCard(
+                                          item: item,
+                                          container: container,
+                                          onTap: () {
+                                            if (container != null) {
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (context) =>
+                                                      ContainerDetailScreen(
+                                                    containerId: container.id,
+                                                  ),
+                                                ),
+                                              );
+                                            }
+                                          },
+                                        ),
+                                      );
+                                    },
                                   ),
-                                  itemCount: _itemResults.length,
-                                  itemBuilder: (context, index) {
-                                    final item = _itemResults[index];
-                                    final container = ContainerService
-                                        .getContainer(item.containerId);
-                                    return ItemCard(
-                                      item: item,
-                                      onTap: () {
-                                        if (container != null) {
-                                          Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder: (context) =>
-                                                  ContainerDetailScreen(
-                                                containerId: container.id,
-                                              ),
-                                            ),
-                                          );
-                                        }
-                                      },
-                                    );
-                                  },
                                 ),
                               ],
                             ],

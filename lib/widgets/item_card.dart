@@ -79,24 +79,31 @@ class ItemCard extends StatelessWidget {
                       ],
                     ),
                   ],
-                  // Tags
+                  // Tags - Compact indicator
                   if (item.tags.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Flexible(
-                      child: Wrap(
-                        spacing: 4,
-                        runSpacing: 4,
-                        children: item.tags.take(3).map((tag) {
-                          return Chip(
-                            label: Text(
-                              tag,
-                              style: const TextStyle(fontSize: 10),
-                            ),
-                            padding: EdgeInsets.zero,
-                            visualDensity: VisualDensity.compact,
-                          );
-                        }).toList(),
-                      ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.label_outline,
+                          size: 12,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            item.tags.length == 1
+                                ? item.tags.first
+                                : '${item.tags.length} tags',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  fontSize: 10,
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ],
