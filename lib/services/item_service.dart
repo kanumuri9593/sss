@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../models/item.dart';
 import 'storage_service.dart';
+import 'cache_service.dart';
 
 /// Item Service for managing items
 ///
@@ -11,6 +12,8 @@ class ItemService {
     try {
       final box = StorageService.itemsBox;
       await box.put(item.id, item);
+      // Invalidate cache for the container
+      CacheService.invalidateContainer(item.containerId);
       // Ensure data is persisted to disk
       await box.flush();
       debugPrint('[ItemService] Created item: ${item.id} (total: ${box.length})');
@@ -68,6 +71,8 @@ class ItemService {
         updatedAt: DateTime.now().toIso8601String(),
       );
       await box.put(item.id, updated);
+      // Invalidate cache for the container
+      CacheService.invalidateContainer(item.containerId);
       // Ensure data is persisted to disk
       await box.flush();
       debugPrint('[ItemService] Updated item: ${item.id}');
@@ -86,7 +91,13 @@ class ItemService {
         debugPrint('[ItemService] Item not found: $id');
         return false;
       }
+      // Get item before deletion to invalidate its container cache
+      final item = box.get(id);
       await box.delete(id);
+      // Invalidate cache for the container
+      if (item != null) {
+        CacheService.invalidateContainer(item.containerId);
+      }
       // Ensure deletion is persisted to disk
       await box.flush();
       debugPrint('[ItemService] Deleted item: $id');
@@ -106,8 +117,14 @@ class ItemService {
         return false;
       }
 
+      final oldContainerId = item.containerId;
       final updated = item.copyWith(containerId: newContainerId);
       await updateItem(updated);
+      // Invalidate cache for both old and new containers
+      CacheService.invalidateContainer(oldContainerId);
+      if (oldContainerId != newContainerId) {
+        CacheService.invalidateContainer(newContainerId);
+      }
       debugPrint('[ItemService] Moved item $itemId to container $newContainerId');
       return true;
     } catch (e) {

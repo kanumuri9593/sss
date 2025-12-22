@@ -1,7 +1,7 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import '../models/item.dart';
 import '../models/container.dart' as models;
+import '../services/image_cache_service.dart';
 
 /// Item Card Widget
 ///
@@ -121,44 +121,50 @@ class ItemCard extends StatelessWidget {
     final imagePath = item.imagePaths.isNotEmpty
         ? item.imagePaths.first
         : item.photoPath;
-    
-    if (imagePath != null && File(imagePath).existsSync()) {
-      return Stack(
-        children: [
-          Image.file(
-            File(imagePath),
-            fit: BoxFit.cover,
-            cacheWidth: 400, // Limit image resolution for better performance
-            errorBuilder: (context, error, stackTrace) {
-              return _buildPlaceholder(context);
-            },
-          ),
-          // Show image count badge if multiple images
-          if (item.imagePaths.length > 1)
-            Positioned(
-              top: 8,
-              right: 8,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.black54,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.photo_library, size: 14, color: Colors.white),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${item.imagePaths.length}',
-                      style: const TextStyle(color: Colors.white, fontSize: 12),
-                    ),
-                  ],
+
+    if (imagePath != null) {
+      final imageProvider = ImageCacheService.getImageProvider(
+        imagePath,
+        cacheWidth: 400,
+      );
+
+      if (imageProvider != null) {
+        return Stack(
+          children: [
+            Image(
+              image: imageProvider,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) {
+                return _buildPlaceholder(context);
+              },
+            ),
+            // Show image count badge if multiple images
+            if (item.imagePaths.length > 1)
+              Positioned(
+                top: 8,
+                right: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.photo_library, size: 14, color: Colors.white),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${item.imagePaths.length}',
+                        style: const TextStyle(color: Colors.white, fontSize: 12),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-        ],
-      );
+          ],
+        );
+      }
     }
     return _buildPlaceholder(context);
   }
@@ -166,11 +172,10 @@ class ItemCard extends StatelessWidget {
   Widget _buildPlaceholder(BuildContext context) {
     return Container(
       color: Theme.of(context).colorScheme.surfaceContainerHighest,
-      child: Center(
+      child: const Center(
         child: Icon(
           Icons.inventory_2_outlined,
           size: 48,
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
         ),
       ),
     );

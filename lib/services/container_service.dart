@@ -3,6 +3,7 @@ import '../models/container.dart';
 import '../models/item.dart';
 import 'storage_service.dart';
 import 'item_service.dart';
+import 'cache_service.dart';
 
 /// Container Service for managing containers
 ///
@@ -14,6 +15,11 @@ class ContainerService {
     try {
       final box = StorageService.containersBox;
       await box.put(container.id, container);
+      // Invalidate cache for parent container (if any) and self
+      if (container.parentContainerId != null) {
+        CacheService.invalidateContainer(container.parentContainerId!);
+      }
+      CacheService.invalidateContainer(container.id);
       // Ensure data is persisted to disk
       await box.flush();
       debugPrint('[ContainerService] Created container: ${container.id} (total: ${box.length})');
@@ -86,6 +92,11 @@ class ContainerService {
         updatedAt: DateTime.now().toIso8601String(),
       );
       await box.put(container.id, updated);
+      // Invalidate cache for this container and its parent (if any)
+      CacheService.invalidateContainer(container.id);
+      if (container.parentContainerId != null) {
+        CacheService.invalidateContainer(container.parentContainerId!);
+      }
       // Ensure data is persisted to disk
       await box.flush();
       debugPrint('[ContainerService] Updated container: ${container.id}');
@@ -108,6 +119,10 @@ class ContainerService {
         return false;
       }
 
+      // Get container to access parent ID before deletion
+      final container = box.get(id);
+      final parentId = container?.parentContainerId;
+
       // Get all child containers recursively
       final childContainers = _getAllChildContainers(id);
 
@@ -124,6 +139,11 @@ class ContainerService {
 
       // Delete the container itself
       await box.delete(id);
+      // Invalidate cache for this container and its parent (if any)
+      CacheService.invalidateContainer(id);
+      if (parentId != null) {
+        CacheService.invalidateContainer(parentId);
+      }
       // Ensure deletion is persisted to disk
       await box.flush();
       debugPrint('[ContainerService] Deleted container: $id');

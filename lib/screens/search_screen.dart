@@ -6,6 +6,7 @@ import '../models/item.dart';
 import '../models/container.dart' as models;
 import '../services/item_service.dart';
 import '../services/container_service.dart';
+import '../services/cache_service.dart';
 import '../services/image_recognition_service.dart';
 import '../widgets/item_card.dart';
 import '../widgets/container_card.dart';
@@ -336,25 +337,27 @@ class _SearchScreenState extends State<SearchScreen> {
                                     itemCount: _containerResults.length,
                                     itemBuilder: (context, index) {
                                       final container = _containerResults[index];
-                                      final itemCount = ItemService.getItemsByContainer(container.id).length;
-                                      final childContainerCount = ContainerService.getChildContainers(container.id).length;
+                                      final itemCount = CacheService.getItemCount(container.id);
+                                      final childContainerCount = CacheService.getChildContainerCount(container.id);
                                       return SizedBox(
                                         width: 160,
-                                        child: ContainerCard(
-                                          container: container,
-                                          itemCount: itemCount,
-                                          childContainerCount: childContainerCount,
-                                          onTap: () {
-                                            Navigator.push(
-                                              context,
-                                              MaterialPageRoute(
-                                                builder: (context) =>
-                                                    ContainerDetailScreen(
-                                                  containerId: container.id,
+                                        child: RepaintBoundary(
+                                          child: ContainerCard(
+                                            container: container,
+                                            itemCount: itemCount,
+                                            childContainerCount: childContainerCount,
+                                            onTap: () {
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (context) =>
+                                                      ContainerDetailScreen(
+                                                    containerId: container.id,
+                                                  ),
                                                 ),
-                                              ),
-                                            );
-                                          },
+                                              );
+                                            },
+                                          ),
                                         ),
                                       );
                                     },
@@ -380,22 +383,24 @@ class _SearchScreenState extends State<SearchScreen> {
                                           .getContainer(item.containerId);
                                       return SizedBox(
                                         width: 160,
-                                        child: ItemCard(
-                                          item: item,
-                                          container: container,
-                                          onTap: () {
-                                            if (container != null) {
-                                              Navigator.push(
-                                                context,
-                                                MaterialPageRoute(
-                                                  builder: (context) =>
-                                                      ContainerDetailScreen(
-                                                    containerId: container.id,
+                                        child: RepaintBoundary(
+                                          child: ItemCard(
+                                            item: item,
+                                            container: container,
+                                            onTap: () {
+                                              if (container != null) {
+                                                Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(
+                                                    builder: (context) =>
+                                                        ContainerDetailScreen(
+                                                      containerId: container.id,
+                                                    ),
                                                   ),
-                                                ),
-                                              );
-                                            }
-                                          },
+                                                );
+                                              }
+                                            },
+                                          ),
                                         ),
                                       );
                                     },

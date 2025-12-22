@@ -1,6 +1,6 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import '../models/container.dart' as models;
+import '../services/image_cache_service.dart';
 
 /// Container Card Widget
 ///
@@ -154,14 +154,20 @@ class ContainerCard extends StatelessWidget {
 
   Widget _buildPhoto(BuildContext context) {
     if (container.photoPath != null) {
-      return Image.file(
-        File(container.photoPath!),
-        fit: BoxFit.cover,
-        cacheWidth: 400, // Limit image resolution for better performance
-        errorBuilder: (context, error, stackTrace) {
-          return _buildPlaceholder(context);
-        },
+      final imageProvider = ImageCacheService.getImageProvider(
+        container.photoPath,
+        cacheWidth: 400,
       );
+
+      if (imageProvider != null) {
+        return Image(
+          image: imageProvider,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            return _buildPlaceholder(context);
+          },
+        );
+      }
     }
     return _buildPlaceholder(context);
   }

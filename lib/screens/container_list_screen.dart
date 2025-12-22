@@ -4,6 +4,7 @@ import '../models/container.dart' as models;
 import '../services/container_service.dart';
 import '../services/item_service.dart';
 import '../services/storage_service.dart';
+import '../services/cache_service.dart';
 import '../widgets/container_card.dart';
 import 'container_detail_screen.dart';
 import 'container_create_screen.dart';
@@ -30,6 +31,8 @@ class _ContainerListScreenState extends State<ContainerListScreen> with WidgetsB
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _searchController.addListener(_onSearchChanged);
+    // Initialize cache for performance
+    CacheService.initialize();
     // Load containers after a short delay to ensure storage is initialized
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadContainers();
@@ -224,13 +227,15 @@ class _ContainerListScreenState extends State<ContainerListScreen> with WidgetsB
                           itemCount: _filteredContainers.length,
                           itemBuilder: (context, index) {
                             final container = _filteredContainers[index];
-                            final itemCount = ItemService.getItemsByContainer(container.id).length;
-                            final childContainerCount = ContainerService.getChildContainers(container.id).length;
-                            return ContainerCard(
-                              container: container,
-                              itemCount: itemCount,
-                              childContainerCount: childContainerCount,
-                              onTap: () => _navigateToDetail(container),
+                            final itemCount = CacheService.getItemCount(container.id);
+                            final childContainerCount = CacheService.getChildContainerCount(container.id);
+                            return RepaintBoundary(
+                              child: ContainerCard(
+                                container: container,
+                                itemCount: itemCount,
+                                childContainerCount: childContainerCount,
+                                onTap: () => _navigateToDetail(container),
+                              ),
                             );
                           },
                         )
@@ -239,15 +244,17 @@ class _ContainerListScreenState extends State<ContainerListScreen> with WidgetsB
                           itemCount: _filteredContainers.length,
                           itemBuilder: (context, index) {
                             final container = _filteredContainers[index];
-                            final itemCount = ItemService.getItemsByContainer(container.id).length;
-                            final childContainerCount = ContainerService.getChildContainers(container.id).length;
+                            final itemCount = CacheService.getItemCount(container.id);
+                            final childContainerCount = CacheService.getChildContainerCount(container.id);
                             return Padding(
                               padding: const EdgeInsets.only(bottom: 16),
-                              child: ContainerCard(
-                                container: container,
-                                itemCount: itemCount,
-                                childContainerCount: childContainerCount,
-                                onTap: () => _navigateToDetail(container),
+                              child: RepaintBoundary(
+                                child: ContainerCard(
+                                  container: container,
+                                  itemCount: itemCount,
+                                  childContainerCount: childContainerCount,
+                                  onTap: () => _navigateToDetail(container),
+                                ),
                               ),
                             );
                           },
