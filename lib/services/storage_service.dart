@@ -4,6 +4,7 @@ import '../models/container.dart';
 import '../models/item.dart';
 import '../models/container_adapter.dart';
 import '../models/item_adapter.dart';
+import 'preferences_service.dart';
 
 /// Storage Service for on-device persistence using Hive
 ///
@@ -31,6 +32,9 @@ class StorageService {
       if (!Hive.isAdapterRegistered(1)) {
         Hive.registerAdapter(ItemAdapter());
       }
+
+      // Initialize preferences
+      await PreferencesService.initialize();
 
       // Open boxes
       _containersBox = await Hive.openBox<Container>(_containersBoxName);

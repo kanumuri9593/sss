@@ -8,6 +8,7 @@ import '../services/cache_service.dart';
 import '../widgets/container_card.dart';
 import 'container_detail_screen.dart';
 import 'container_create_screen.dart';
+import 'settings_screen.dart';
 
 /// Container List Screen
 ///
@@ -156,6 +157,16 @@ class _ContainerListScreenState extends State<ContainerListScreen> with WidgetsB
               });
             },
             tooltip: _isGridView ? 'List view' : 'Grid view',
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SettingsScreen()),
+              );
+            },
+            tooltip: 'Settings',
           ),
         ],
       ),

@@ -1,8 +1,12 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:image/image.dart' as img;
 import 'package:tflite_flutter/tflite_flutter.dart';
 import '../models/container.dart' as models;
+import '../models/app_settings.dart';
+import 'preferences_service.dart';
+import 'mlkit_image_service.dart';
 
 /// Image Recognition Service using TensorFlow Lite
 ///
@@ -12,6 +16,8 @@ class ImageRecognitionService {
   static Interpreter? _interpreter;
   static bool _isInitialized = false;
   static bool _modelAvailable = false;
+  static List<String>? _imageNetLabels;
+  static bool _labelsLoaded = false;
 
   // ImageNet class labels mapping (subset relevant to containers/items)
   // Full list has 1000 classes, but we focus on storage-related ones
@@ -58,6 +64,20 @@ class ImageRecognitionService {
       _isInitialized = true;
       debugPrint('[ImageRecognition] TensorFlow Lite model not available, using heuristic fallback: $e');
     }
+
+    // Load ImageNet labels
+    try {
+      final labelsData = await rootBundle.loadString('assets/models/imagenet_labels.txt');
+      _imageNetLabels = labelsData.split('\n').map((e) => e.trim()).toList();
+      _labelsLoaded = true;
+      debugPrint('[ImageRecognition] Loaded ${_imageNetLabels!.length} ImageNet labels');
+    } catch (e) {
+      debugPrint('[ImageRecognition] Failed to load ImageNet labels: $e');
+      _labelsLoaded = false;
+    }
+
+    // Initialize ML Kit
+    await MLKitImageService.initialize();
   }
 
   /// Check if the service is initialized
@@ -70,6 +90,7 @@ class ImageRecognitionService {
   ///
   /// Returns a list of tag suggestions (3-5 tags) based on detected objects/features in the image.
   /// Tags are formatted as lowercase strings suitable for use in the tagging system.
+  /// Routes to the appropriate provider based on user settings.
   static Future<List<String>> processImage(String imagePath) async {
     if (!_isInitialized) {
       await initialize();
@@ -82,13 +103,43 @@ class ImageRecognitionService {
         return _generateHeuristicTags(null);
       }
 
-      if (_modelAvailable && _interpreter != null) {
-        // Use TensorFlow Lite model
-        return await _processWithTFLite(file);
-      } else {
-        // Fallback to heuristics
-        return _generateHeuristicTags(null);
+      // Get user preferences
+      final provider = PreferencesService.isInitialized
+          ? PreferencesService.settings.imageRecognitionProvider
+          : ImageRecognitionProvider.tensorflowLite;
+
+      final confidenceThreshold = PreferencesService.isInitialized
+          ? PreferencesService.settings.confidenceThreshold
+          : 0.3;
+
+      final useHeuristicFallback = PreferencesService.isInitialized
+          ? PreferencesService.settings.useHeuristicFallback
+          : true;
+
+      // Route to appropriate provider
+      List<String> tags = [];
+
+      if (provider == ImageRecognitionProvider.mlKit && MLKitImageService.isAvailable) {
+        // Use ML Kit
+        tags = await MLKitImageService.processImage(
+          imagePath,
+          confidenceThreshold: confidenceThreshold,
+        );
+        debugPrint('[ImageRecognition] ML Kit returned ${tags.length} tags');
+      } else if (_modelAvailable && _interpreter != null) {
+        // Use TensorFlow Lite
+        tags = await _processWithTFLite(file, confidenceThreshold);
+        debugPrint('[ImageRecognition] TFLite returned ${tags.length} tags');
       }
+
+      // Fallback to heuristics if needed
+      if (tags.length < 3 && useHeuristicFallback) {
+        final heuristicTags = _generateHeuristicTags(null);
+        tags.addAll(heuristicTags.take(3 - tags.length));
+        debugPrint('[ImageRecognition] Added ${3 - tags.length} heuristic tags');
+      }
+
+      return tags.take(5).toList();
     } catch (e) {
       debugPrint('[ImageRecognition] Error processing image: $e');
       return _generateHeuristicTags(null);
@@ -96,7 +147,10 @@ class ImageRecognitionService {
   }
 
   /// Process image using TensorFlow Lite
-  static Future<List<String>> _processWithTFLite(File imageFile) async {
+  static Future<List<String>> _processWithTFLite(
+    File imageFile,
+    double confidenceThreshold,
+  ) async {
     try {
       // Read and decode image
       final imageBytes = await imageFile.readAsBytes();
@@ -136,8 +190,8 @@ class ImageRecognitionService {
         final classId = indexedPredictions[i].key;
         final confidence = indexedPredictions[i].value;
 
-        // Filter by confidence threshold (>0.3)
-        if (confidence > 0.3) {
+        // Filter by confidence threshold
+        if (confidence > confidenceThreshold) {
           // Try to get label from our mapping
           String? tag;
           if (_classLabels.containsKey(classId)) {
@@ -195,8 +249,10 @@ class ImageRecognitionService {
 
   /// Get ImageNet label for class ID (simplified lookup)
   static String? _getImageNetLabel(int classId) {
-    // This is a simplified version - in production, you'd load the full ImageNet labels
-    // For now, return null to use heuristics
+    if (_labelsLoaded && _imageNetLabels != null &&
+        classId >= 0 && classId < _imageNetLabels!.length) {
+      return _imageNetLabels![classId].toLowerCase();
+    }
     return null;
   }
 
@@ -305,6 +361,7 @@ class ImageRecognitionService {
   static Future<void> close() async {
     _interpreter?.close();
     _interpreter = null;
+    await MLKitImageService.close();
     _isInitialized = false;
     _modelAvailable = false;
     debugPrint('[ImageRecognition] Service closed');

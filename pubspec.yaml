@@ -77,6 +77,9 @@ dependencies:
   # Image picker
   image_picker: ^1.0.7
 
+  # Google ML Kit for cloud-based image labeling (optional)
+  google_mlkit_image_labeling: ^0.13.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
