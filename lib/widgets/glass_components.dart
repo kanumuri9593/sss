@@ -44,25 +44,34 @@ class GlassCard extends StatelessWidget {
     final radius = borderRadius ?? BorderRadius.circular(24);
     final glassColor = tintColor ?? (isDark ? Colors.white : Colors.white);
 
+    // Use lighter shadows on light backgrounds
+    final defaultShadows = isDark
+        ? [
+            BoxShadow(
+              color: theme.colorScheme.primary.withValues(alpha: 0.1),
+              blurRadius: 20,
+              offset: const Offset(0, 8),
+              spreadRadius: -4,
+            ),
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.3),
+              blurRadius: 30,
+              offset: const Offset(0, 12),
+            ),
+          ]
+        : [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ];
+
     return Container(
       margin: margin,
       decoration: BoxDecoration(
         borderRadius: radius,
-        boxShadow:
-            shadows ??
-            [
-              BoxShadow(
-                color: theme.colorScheme.primary.withValues(alpha: 0.1),
-                blurRadius: 20,
-                offset: const Offset(0, 8),
-                spreadRadius: -4,
-              ),
-              BoxShadow(
-                color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
-                blurRadius: 30,
-                offset: const Offset(0, 12),
-              ),
-            ],
+        boxShadow: shadows ?? defaultShadows,
       ),
       child: ClipRRect(
         borderRadius: radius,
@@ -87,8 +96,10 @@ class GlassCard extends StatelessWidget {
                   borderRadius: radius,
                   border: enableBorder
                       ? Border.all(
-                          color: glassColor.withValues(alpha: 0.2),
-                          width: 1.5,
+                          color: isDark
+                              ? glassColor.withValues(alpha: 0.2)
+                              : Colors.black.withValues(alpha: 0.06),
+                          width: 1,
                         )
                       : null,
                 ),
@@ -329,6 +340,7 @@ class _GlassButtonState extends State<GlassButton>
     final theme = Theme.of(context);
     final radius = widget.borderRadius ?? BorderRadius.circular(16);
     final glow = widget.glowColor ?? theme.colorScheme.primary;
+    final isDark = theme.brightness == Brightness.dark;
 
     return GestureDetector(
       onTapDown: widget.onPressed != null ? _handleTapDown : null,
@@ -344,44 +356,29 @@ class _GlassButtonState extends State<GlassButton>
                 borderRadius: radius,
                 boxShadow: [
                   BoxShadow(
-                    color: glow.withValues(alpha: 0.3 * _glowAnimation.value),
-                    blurRadius: 20 + (10 * _glowAnimation.value),
+                    color: glow.withValues(alpha: 0.2 + (0.15 * _glowAnimation.value)),
+                    blurRadius: 12 + (8 * _glowAnimation.value),
+                    offset: const Offset(0, 4),
                     spreadRadius: -2,
                   ),
                 ],
               ),
-              child: ClipRRect(
-                borderRadius: radius,
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(
-                    sigmaX: widget.blur,
-                    sigmaY: widget.blur,
-                  ),
-                  child: Container(
-                    padding:
-                        widget.padding ??
-                        const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 14,
-                        ),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          Colors.white.withValues(alpha: widget.opacity + 0.1),
-                          Colors.white.withValues(alpha: widget.opacity),
-                        ],
-                      ),
-                      borderRadius: radius,
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.3),
-                        width: 1,
-                      ),
+              child: Container(
+                padding:
+                    widget.padding ??
+                    const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 14,
                     ),
-                    child: child,
+                decoration: BoxDecoration(
+                  color: glow.withValues(alpha: isDark ? 0.2 : 0.12),
+                  borderRadius: radius,
+                  border: Border.all(
+                    color: glow.withValues(alpha: 0.4),
+                    width: 1.5,
                   ),
                 ),
+                child: child,
               ),
             ),
           );
@@ -537,41 +534,42 @@ class _GlassFABState extends State<GlassFAB>
           return Transform.scale(
             scale: _scaleAnimation.value,
             child: Container(
+              width: widget.extended ? null : 56,
+              height: 56,
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(widget.extended ? 28 : 56),
+                borderRadius: BorderRadius.circular(widget.extended ? 28 : 28),
                 boxShadow: [
                   BoxShadow(
-                    color: bgColor.withValues(alpha: 0.4),
-                    blurRadius: 20,
-                    offset: const Offset(0, 8),
+                    color: bgColor.withValues(alpha: 0.35),
+                    blurRadius: 16,
+                    offset: const Offset(0, 6),
                   ),
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.1),
-                    blurRadius: 30,
-                    offset: const Offset(0, 12),
+                    color: Colors.black.withValues(alpha: 0.08),
+                    blurRadius: 20,
+                    offset: const Offset(0, 8),
                   ),
                 ],
               ),
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(widget.extended ? 28 : 56),
+                borderRadius: BorderRadius.circular(widget.extended ? 28 : 28),
                 child: BackdropFilter(
                   filter: ImageFilter.blur(
                     sigmaX: widget.blur,
                     sigmaY: widget.blur,
                   ),
                   child: Container(
-                    height: 56,
                     padding: EdgeInsets.symmetric(
-                      horizontal: widget.extended ? 20 : 16,
+                      horizontal: widget.extended ? 20 : 0,
                     ),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
-                        colors: [bgColor.withValues(alpha: 0.9), bgColor],
+                        colors: [bgColor, bgColor.withValues(alpha: 0.9)],
                       ),
                       borderRadius: BorderRadius.circular(
-                        widget.extended ? 28 : 56,
+                        widget.extended ? 28 : 28,
                       ),
                     ),
                     child: widget.extended && widget.label != null

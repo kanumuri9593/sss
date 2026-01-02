@@ -6,6 +6,10 @@ PODS:
     - Flutter
     - SVGKit (~> 3.0)
   - Flutter (1.0.0)
+  - flutter_core_spotlight (0.0.1):
+    - Flutter
+  - flutter_siri_suggestions (0.0.1):
+    - Flutter
   - google_mlkit_commons (0.9.0):
     - Flutter
     - MLKitVision
@@ -40,6 +44,8 @@ PODS:
     - GoogleUtilities/Logger
     - GoogleUtilities/Privacy
   - GTMSessionFetcher/Core (3.5.0)
+  - home_widget (0.0.1):
+    - Flutter
   - image_picker_ios (0.0.1):
     - Flutter
   - MLImage (1.0.0-beta6)
@@ -123,8 +129,11 @@ PODS:
 DEPENDENCIES:
   - cupertino_native_better (from `.symlinks/plugins/cupertino_native_better/ios`)
   - Flutter (from `Flutter`)
+  - flutter_core_spotlight (from `.symlinks/plugins/flutter_core_spotlight/ios`)
+  - flutter_siri_suggestions (from `.symlinks/plugins/flutter_siri_suggestions/ios`)
   - google_mlkit_commons (from `.symlinks/plugins/google_mlkit_commons/ios`)
   - google_mlkit_image_labeling (from `.symlinks/plugins/google_mlkit_image_labeling/ios`)
+  - home_widget (from `.symlinks/plugins/home_widget/ios`)
   - image_picker_ios (from `.symlinks/plugins/image_picker_ios/ios`)
   - mobile_scanner (from `.symlinks/plugins/mobile_scanner/darwin`)
   - nfc_manager (from `.symlinks/plugins/nfc_manager/ios`)
@@ -160,10 +169,16 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/cupertino_native_better/ios"
   Flutter:
     :path: Flutter
+  flutter_core_spotlight:
+    :path: ".symlinks/plugins/flutter_core_spotlight/ios"
+  flutter_siri_suggestions:
+    :path: ".symlinks/plugins/flutter_siri_suggestions/ios"
   google_mlkit_commons:
     :path: ".symlinks/plugins/google_mlkit_commons/ios"
   google_mlkit_image_labeling:
     :path: ".symlinks/plugins/google_mlkit_image_labeling/ios"
+  home_widget:
+    :path: ".symlinks/plugins/home_widget/ios"
   image_picker_ios:
     :path: ".symlinks/plugins/image_picker_ios/ios"
   mobile_scanner:
@@ -183,6 +198,8 @@ SPEC CHECKSUMS:
   CocoaLumberjack: 5644158777912b7de7469fa881f8a3f259c2512a
   cupertino_native_better: 1548ee565186534a34a406bf56b7c49510485844
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
+  flutter_core_spotlight: ffa0331f617dbb2962517052a814b8682383e227
+  flutter_siri_suggestions: cb771b1ca144bd25d8c53b691e7035fefe4654d3
   google_mlkit_commons: 92c769cc2e0a2bfdeb3c38091a36e8a9cc8c63d4
   google_mlkit_image_labeling: e01dfa7cf050b00f8db79e37ae385c0f4ea82de6
   GoogleDataTransport: aae35b7ea0c09004c3797d53c8c41f66f219d6a7
@@ -190,6 +207,7 @@ SPEC CHECKSUMS:
   GoogleToolboxForMac: d1a2cbf009c453f4d6ded37c105e2f67a32206d8
   GoogleUtilities: 00c88b9a86066ef77f0da2fab05f65d7768ed8e1
   GTMSessionFetcher: 5aea5ba6bd522a239e236100971f10cb71b96ab6
+  home_widget: f169fc41fd807b4d46ab6615dc44d62adbf9f64f
   image_picker_ios: e0ece4aa2a75771a7de3fa735d26d90817041326
   MLImage: 0ad1c5f50edd027672d8b26b0fee78a8b4a0fc56
   MLKitCommon: 07c2c33ae5640e5380beaaa6e4b9c249a205542d
