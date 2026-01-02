@@ -2,13 +2,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/container.dart' as models;
 import '../services/container_service.dart';
-import '../services/item_service.dart';
 import '../services/storage_service.dart';
 import '../services/cache_service.dart';
 import '../widgets/container_card.dart';
 import 'container_detail_screen.dart';
 import 'container_create_screen.dart';
-import 'settings_screen.dart';
+import 'profile_screen.dart';
 
 /// Container List Screen
 ///
@@ -20,7 +19,8 @@ class ContainerListScreen extends StatefulWidget {
   State<ContainerListScreen> createState() => _ContainerListScreenState();
 }
 
-class _ContainerListScreenState extends State<ContainerListScreen> with WidgetsBindingObserver {
+class _ContainerListScreenState extends State<ContainerListScreen>
+    with WidgetsBindingObserver {
   final TextEditingController _searchController = TextEditingController();
   List<models.Container> _containers = [];
   List<models.Container> _filteredContainers = [];
@@ -70,13 +70,17 @@ class _ContainerListScreenState extends State<ContainerListScreen> with WidgetsB
     try {
       // Ensure storage is initialized
       if (!StorageService.isInitialized) {
-        debugPrint('[ContainerListScreen] Storage not initialized, skipping load');
+        debugPrint(
+          '[ContainerListScreen] Storage not initialized, skipping load',
+        );
         return;
       }
 
       final containers = ContainerService.getAllContainers();
-      debugPrint('[ContainerListScreen] Loaded ${containers.length} containers');
-      
+      debugPrint(
+        '[ContainerListScreen] Loaded ${containers.length} containers',
+      );
+
       if (mounted) {
         setState(() {
           _containers = containers;
@@ -84,7 +88,9 @@ class _ContainerListScreenState extends State<ContainerListScreen> with WidgetsB
           if (_searchController.text.isEmpty) {
             _filteredContainers = _containers;
           } else {
-            _filteredContainers = ContainerService.searchContainers(_searchController.text);
+            _filteredContainers = ContainerService.searchContainers(
+              _searchController.text,
+            );
           }
         });
       }
@@ -123,9 +129,7 @@ class _ContainerListScreenState extends State<ContainerListScreen> with WidgetsB
 
   void _navigateToCreate() async {
     await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => const ContainerCreateScreen(),
-      ),
+      MaterialPageRoute(builder: (context) => const ContainerCreateScreen()),
     );
     // Always reload when returning from create screen
     // to ensure we have the latest data
@@ -163,7 +167,7 @@ class _ContainerListScreenState extends State<ContainerListScreen> with WidgetsB
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const SettingsScreen()),
+                MaterialPageRoute(builder: (context) => const ProfileScreen()),
               );
             },
             tooltip: 'Settings',
@@ -203,23 +207,31 @@ class _ContainerListScreenState extends State<ContainerListScreen> with WidgetsB
                           Icon(
                             Icons.inventory_2_outlined,
                             size: 64,
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
                           ),
                           const SizedBox(height: 16),
                           Text(
                             _searchController.text.isEmpty
                                 ? 'No containers yet'
                                 : 'No containers found',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
                                 ),
                           ),
                           if (_searchController.text.isEmpty) ...[
                             const SizedBox(height: 8),
                             Text(
                               'Tap + to create your first container',
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
                                   ),
                             ),
                           ],
@@ -227,57 +239,64 @@ class _ContainerListScreenState extends State<ContainerListScreen> with WidgetsB
                       ),
                     )
                   : _isGridView
-                      ? GridView.builder(
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  ? GridView.builder(
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: 2,
                             crossAxisSpacing: 16,
                             mainAxisSpacing: 16,
                             childAspectRatio: 0.75,
                           ),
-                          padding: const EdgeInsets.all(16),
-                          itemCount: _filteredContainers.length,
-                          itemBuilder: (context, index) {
-                            final container = _filteredContainers[index];
-                            final itemCount = CacheService.getItemCount(container.id);
-                            final childContainerCount = CacheService.getChildContainerCount(container.id);
-                            return RepaintBoundary(
-                              child: ContainerCard(
-                                container: container,
-                                itemCount: itemCount,
-                                childContainerCount: childContainerCount,
-                                onTap: () => _navigateToDetail(container),
-                              ),
-                            );
-                          },
-                        )
-                      : ListView.builder(
-                          padding: const EdgeInsets.all(16),
-                          itemCount: _filteredContainers.length,
-                          itemBuilder: (context, index) {
-                            final container = _filteredContainers[index];
-                            final itemCount = CacheService.getItemCount(container.id);
-                            final childContainerCount = CacheService.getChildContainerCount(container.id);
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 16),
-                              child: RepaintBoundary(
-                                child: ContainerCard(
-                                  container: container,
-                                  itemCount: itemCount,
-                                  childContainerCount: childContainerCount,
-                                  onTap: () => _navigateToDetail(container),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
+                      padding: const EdgeInsets.all(16),
+                      itemCount: _filteredContainers.length,
+                      itemBuilder: (context, index) {
+                        final container = _filteredContainers[index];
+                        final itemCount = CacheService.getItemCount(
+                          container.id,
+                        );
+                        final childContainerCount =
+                            CacheService.getChildContainerCount(container.id);
+                        return RepaintBoundary(
+                          child: ContainerCard(
+                            container: container,
+                            itemCount: itemCount,
+                            childContainerCount: childContainerCount,
+                            onTap: () => _navigateToDetail(container),
+                          ),
+                        );
+                      },
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: _filteredContainers.length,
+                      itemBuilder: (context, index) {
+                        final container = _filteredContainers[index];
+                        final itemCount = CacheService.getItemCount(
+                          container.id,
+                        );
+                        final childContainerCount =
+                            CacheService.getChildContainerCount(container.id);
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          child: RepaintBoundary(
+                            child: ContainerCard(
+                              container: container,
+                              itemCount: itemCount,
+                              childContainerCount: childContainerCount,
+                              onTap: () => _navigateToDetail(container),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
             ),
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _navigateToCreate,
-        child: const Icon(Icons.add),
         tooltip: 'Create container',
+        child: const Icon(Icons.add),
       ),
     );
   }

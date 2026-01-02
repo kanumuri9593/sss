@@ -34,8 +34,8 @@ class _ContainerDetailScreenState extends State<ContainerDetailScreen> {
   final TextEditingController _searchController = TextEditingController();
   List<Item> _filteredItems = [];
   Timer? _searchDebounceTimer;
-  Map<String, List<Item>> _itemGroups = {}; // Group name -> items
-  List<String> _groupOrder = []; // Order of groups
+  final Map<String, List<Item>> _itemGroups = {}; // Group name -> items
+  final List<String> _groupOrder = []; // Order of groups
 
   @override
   void initState() {
@@ -586,13 +586,13 @@ class _ContainerDetailScreenState extends State<ContainerDetailScreen> {
                   ),
                 ],
               );
-            }).toList(),
+            }),
         ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _addItem,
-        child: const Icon(Icons.add),
         tooltip: 'Add item',
+        child: const Icon(Icons.add),
       ),
     );
   }
