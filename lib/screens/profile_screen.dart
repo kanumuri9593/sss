@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/app_settings.dart';
 import '../services/preferences_service.dart';
+import '../theme/app_theme_mode.dart';
 
 /// Profile Screen with gradient header and avatar section
 ///
@@ -163,6 +164,115 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  /// Build theme selector with visual preview cards
+  Widget _buildThemeSelector() {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.palette_outlined,
+                  color: colorScheme.primary,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Theme',
+                  style: textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: AppThemeMode.values.map((mode) {
+                final isSelected = _settings.themeMode == mode;
+                return Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: _buildThemePreviewCard(
+                      mode: mode,
+                      isSelected: isSelected,
+                      colorScheme: colorScheme,
+                      textTheme: textTheme,
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Build individual theme preview card
+  Widget _buildThemePreviewCard({
+    required AppThemeMode mode,
+    required bool isSelected,
+    required ColorScheme colorScheme,
+    required TextTheme textTheme,
+  }) {
+    return InkWell(
+      onTap: () {
+        _updateSettings(_settings.copyWith(themeMode: mode));
+      },
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: isSelected
+                ? colorScheme.primary
+                : colorScheme.outline.withOpacity(0.3),
+            width: isSelected ? 2 : 1,
+          ),
+          borderRadius: BorderRadius.circular(12),
+          color: isSelected
+              ? colorScheme.primaryContainer.withOpacity(0.3)
+              : colorScheme.surface,
+        ),
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              mode.icon,
+              color: isSelected ? colorScheme.primary : colorScheme.onSurface,
+              size: 28,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              mode.displayName,
+              style: textTheme.labelMedium?.copyWith(
+                color:
+                    isSelected ? colorScheme.primary : colorScheme.onSurface,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            if (isSelected) ...[
+              const SizedBox(height: 4),
+              Icon(
+                Icons.check_circle,
+                color: colorScheme.primary,
+                size: 16,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -179,7 +289,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 8),
               _buildSectionHeader('Profile Settings'),
 
-              // Placeholder for future settings sections
+              // Notifications setting
               Card(
                 margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: ListTile(
@@ -201,6 +311,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
               ),
+
+              // Appearance section
+              _buildSectionHeader('Appearance'),
+              _buildThemeSelector(),
 
               const SizedBox(height: 24),
             ]),

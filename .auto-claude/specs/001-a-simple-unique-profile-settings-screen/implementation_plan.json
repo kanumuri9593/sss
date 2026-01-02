@@ -98,7 +98,9 @@
             "Add updateNotificationsEnabled(bool enabled) convenience method",
             "These wrap settings.copyWith() + updateSettings() pattern"
           ],
-          "status": "pending"
+          "status": "completed",
+          "notes": "Successfully added profile-specific helper methods (updateDisplayName, updateNotificationsEnabled) to PreferencesService. Also added corresponding getter methods (displayName, notificationsEnabled). Methods follow the same pattern as existing Theme Helpers, using copyWith() + updateSettings() for consistency.",
+          "updated_at": "2026-01-02T17:06:05.686045+00:00"
         }
       ]
     },
@@ -136,7 +138,9 @@
             "Add display name below avatar with edit capability",
             "Use AppSpacing and AppRadius tokens for consistency"
           ],
-          "status": "pending"
+          "status": "completed",
+          "notes": "Successfully created ProfileScreen with gradient header and avatar section. Implemented StatefulWidget pattern following Material Design 3 guidelines. Features include: gradient header (primary to primaryContainer), avatar with user initials, editable display name via dialog, and notifications toggle. Also created AppThemeMode enum with display name and icon extensions, and added path_provider dependency to pubspec.yaml.",
+          "updated_at": "2026-01-02T17:08:55.716769+00:00"
         },
         {
           "id": "subtask-3-2",
@@ -437,5 +441,5 @@
     }
   },
   "qa_signoff": null,
-  "last_updated": "2026-01-02T17:04:12.945859+00:00"
+  "last_updated": "2026-01-02T17:08:55.716799+00:00"
 }
