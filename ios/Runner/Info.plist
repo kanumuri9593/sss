@@ -48,7 +48,7 @@
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>This app needs access to save QR code images to your photo library.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>This app needs access to save QR code images.</string>
+	<string>This app needs access to your photos to add images to containers and items for smart storage management.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UIFileSharingEnabled</key>

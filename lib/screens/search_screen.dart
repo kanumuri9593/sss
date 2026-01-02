@@ -128,12 +128,12 @@ class _SearchScreenState extends State<SearchScreen> {
             ListTile(
               leading: const Icon(Icons.camera_alt),
               title: const Text('Camera'),
-              onTap: () => Navigator.pop(context, ImageSource.camera),
+              onTap: () => Navigator.of(context).pop(ImageSource.camera),
             ),
             ListTile(
               leading: const Icon(Icons.photo_library),
               title: const Text('Gallery'),
-              onTap: () => Navigator.pop(context, ImageSource.gallery),
+              onTap: () => Navigator.of(context).pop(ImageSource.gallery),
             ),
           ],
         ),
@@ -142,12 +142,20 @@ class _SearchScreenState extends State<SearchScreen> {
 
     if (source == null) return;
 
+    // Wait for dialog to fully dismiss on iOS before opening picker
+    await Future.delayed(const Duration(milliseconds: 300));
+
+    if (!mounted) return;
+
     try {
       setState(() {
         _isSearching = true;
       });
 
-      final pickedFile = await picker.pickImage(source: source);
+      final pickedFile = await picker.pickImage(
+        source: source,
+        imageQuality: 85,
+      );
       if (pickedFile != null) {
         // Save image temporarily for processing
         final fileName = 'search_${DateTime.now().millisecondsSinceEpoch}.jpg';
