@@ -1,0 +1,51 @@
+{
+  "task_description": "Create a simple unique profile/settings screen for the SSS Flutter app",
+  "scoped_services": ["flutter_app"],
+  "files_to_modify": {
+    "flutter_app": [
+      "lib/models/app_settings.dart",
+      "lib/models/app_settings_adapter.dart",
+      "lib/services/preferences_service.dart",
+      "lib/screens/main_tab_screen.dart"
+    ]
+  },
+  "files_to_create": {
+    "flutter_app": [
+      "lib/screens/profile_screen.dart"
+    ]
+  },
+  "files_to_reference": [
+    "lib/screens/settings_screen.dart",
+    "lib/screens/container_detail_screen.dart",
+    "lib/theme/app_theme.dart",
+    "lib/theme/app_theme_mode.dart",
+    "lib/theme/app_theme_extension.dart",
+    "lib/theme/tokens/app_gradients.dart",
+    "lib/theme/tokens/app_spacing.dart",
+    "lib/theme/tokens/app_radius.dart"
+  ],
+  "patterns": {
+    "screen_pattern": "StatefulWidget with late AppSettings _settings initialized from PreferencesService.settings in initState",
+    "settings_update_pattern": "_updateSettings method calls setState then PreferencesService.updateSettings",
+    "model_pattern": "copyWith with nullable params using ?? fallback, auto-sets updatedAt",
+    "theme_pattern": "Use Theme.of(context).colorScheme for colors, AppThemeExtension.of(context) for gradients",
+    "section_header_pattern": "Padding fromLTRB(16, 16, 16, 8) with titleSmall style in primary color"
+  },
+  "existing_implementations": {
+    "description": "Existing settings_screen.dart handles image recognition settings. AppSettings model has 4 fields. PreferencesService initialized in StorageService.initialize(). 8 theme variants available via AppThemeMode enum.",
+    "relevant_files": [
+      "lib/screens/settings_screen.dart",
+      "lib/models/app_settings.dart",
+      "lib/services/preferences_service.dart",
+      "lib/theme/app_theme_mode.dart"
+    ]
+  },
+  "constraints": {
+    "no_backend": "Local-only profile, no cloud sync or authentication",
+    "reuse_storage": "Must use existing Hive + PreferencesService",
+    "theme_consistency": "Use existing theme tokens, no hardcoded colors",
+    "simple_design": "Keep UI simple while adding unique visual elements"
+  },
+  "created_at": "2026-01-02T07:35:17.748465",
+  "updated_at": "2026-01-02T12:30:00.000000"
+}

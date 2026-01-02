@@ -1,0 +1,42 @@
+{
+  "project_type": "single",
+  "services": {
+    "flutter_app": {
+      "path": ".",
+      "tech_stack": ["dart", "flutter", "hive", "material_design_3"],
+      "port": null,
+      "dev_command": "flutter run",
+      "test_command": "flutter test",
+      "entry_point": "lib/main.dart",
+      "key_directories": {
+        "screens": "lib/screens/",
+        "models": "lib/models/",
+        "services": "lib/services/",
+        "theme": "lib/theme/",
+        "widgets": "lib/widgets/"
+      }
+    }
+  },
+  "infrastructure": {
+    "docker": false,
+    "database": "hive_local",
+    "ci_cd": false
+  },
+  "conventions": {
+    "linter": "flutter_lints",
+    "formatter": "dart_format",
+    "testing": "flutter_test",
+    "state_management": "StatefulWidget",
+    "theme_system": {
+      "modes": ["light", "dark", "system", "retro", "highContrast", "oceanBlue", "forestGreen", "sunsetOrange"],
+      "extension": "AppThemeExtension",
+      "tokens": ["AppColors", "AppSpacing", "AppRadius", "AppGradients", "AppTypography", "AppShadows", "AppAnimations"]
+    }
+  },
+  "patterns": {
+    "settings_persistence": "PreferencesService static class with Hive storage",
+    "model_updates": "copyWith pattern with auto-updated timestamps",
+    "screen_structure": "StatefulWidget with initState loading from services",
+    "theme_access": "Theme.of(context).colorScheme and AppThemeExtension.of(context)"
+  }
+}

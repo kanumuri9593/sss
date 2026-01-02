@@ -1,0 +1,378 @@
+{
+  "feature": "Simple Unique Profile/Settings Screen",
+  "workflow_type": "feature",
+  "workflow_rationale": "Net-new feature adding user-facing profile UI to the Flutter app. Requires creating new screen, extending data model, and integrating with existing navigation. Multiple new files and integration points.",
+  "phases": [
+    {
+      "id": "phase-1-model",
+      "name": "Data Model Extension",
+      "type": "implementation",
+      "description": "Extend AppSettings model with profile-related fields and update Hive adapter",
+      "depends_on": [],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-1-1",
+          "description": "Add profile fields (displayName, themeMode, notificationsEnabled) to AppSettings model",
+          "service": "flutter_app",
+          "files_to_modify": ["lib/models/app_settings.dart"],
+          "files_to_create": [],
+          "patterns_from": ["lib/models/app_settings.dart"],
+          "verification": {
+            "type": "command",
+            "command": "cd /Users/yeswanthvarmakanumuri/Downloads/SSS/sss && flutter analyze lib/models/app_settings.dart",
+            "expected": "No issues found"
+          },
+          "implementation_notes": [
+            "Add String displayName field with default 'User'",
+            "Add String themeMode field with default 'system' (store as string, parse to AppThemeMode)",
+            "Add bool notificationsEnabled field with default true",
+            "Update copyWith method with new nullable parameters",
+            "Update fromJson/toJson for new fields with graceful fallbacks for missing data",
+            "Update defaultSettings factory to include new field defaults"
+          ],
+          "status": "pending"
+        },
+        {
+          "id": "subtask-1-2",
+          "description": "Update AppSettingsAdapter for Hive to handle new fields",
+          "service": "flutter_app",
+          "files_to_modify": ["lib/models/app_settings_adapter.dart"],
+          "files_to_create": [],
+          "patterns_from": ["lib/models/app_settings_adapter.dart"],
+          "verification": {
+            "type": "command",
+            "command": "cd /Users/yeswanthvarmakanumuri/Downloads/SSS/sss && flutter analyze lib/models/app_settings_adapter.dart",
+            "expected": "No issues found"
+          },
+          "implementation_notes": [
+            "Adapter uses JSON serialization via toJson/fromJson",
+            "No changes needed if model's fromJson handles missing fields gracefully",
+            "Verify adapter still works with updated model structure"
+          ],
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": "phase-2-service",
+      "name": "PreferencesService Extension",
+      "type": "implementation",
+      "description": "Add profile-specific convenience methods to PreferencesService",
+      "depends_on": ["phase-1-model"],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-2-1",
+          "description": "Add profile-specific helper methods to PreferencesService",
+          "service": "flutter_app",
+          "files_to_modify": ["lib/services/preferences_service.dart"],
+          "files_to_create": [],
+          "patterns_from": ["lib/services/preferences_service.dart"],
+          "verification": {
+            "type": "command",
+            "command": "cd /Users/yeswanthvarmakanumuri/Downloads/SSS/sss && flutter analyze lib/services/preferences_service.dart",
+            "expected": "No issues found"
+          },
+          "implementation_notes": [
+            "Add updateDisplayName(String name) convenience method",
+            "Add updateThemeMode(String mode) convenience method",
+            "Add updateNotificationsEnabled(bool enabled) convenience method",
+            "These wrap settings.copyWith() + updateSettings() pattern"
+          ],
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": "phase-3-screen",
+      "name": "Profile Screen Implementation",
+      "type": "implementation",
+      "description": "Create the new ProfileScreen with unique visual design",
+      "depends_on": ["phase-2-service"],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-3-1",
+          "description": "Create ProfileScreen with gradient header and avatar section",
+          "service": "flutter_app",
+          "files_to_modify": [],
+          "files_to_create": ["lib/screens/profile_screen.dart"],
+          "patterns_from": ["lib/screens/settings_screen.dart", "lib/theme/tokens/app_gradients.dart"],
+          "verification": {
+            "type": "command",
+            "command": "cd /Users/yeswanthvarmakanumuri/Downloads/SSS/sss && flutter analyze lib/screens/profile_screen.dart",
+            "expected": "No issues found"
+          },
+          "implementation_notes": [
+            "Use StatefulWidget pattern from settings_screen.dart",
+            "Create gradient header using AppThemeExtension.of(context).primaryGradient",
+            "Add CircleAvatar with initials from displayName",
+            "Add display name below avatar with edit capability",
+            "Use AppSpacing and AppRadius tokens for consistency"
+          ],
+          "status": "pending"
+        },
+        {
+          "id": "subtask-3-2",
+          "description": "Add theme selector section with visual theme preview",
+          "service": "flutter_app",
+          "files_to_modify": ["lib/screens/profile_screen.dart"],
+          "files_to_create": [],
+          "patterns_from": ["lib/screens/settings_screen.dart", "lib/theme/app_theme_mode.dart"],
+          "verification": {
+            "type": "command",
+            "command": "cd /Users/yeswanthvarmakanumuri/Downloads/SSS/sss && flutter analyze lib/screens/profile_screen.dart",
+            "expected": "No issues found"
+          },
+          "implementation_notes": [
+            "Create theme selector using AppThemeMode enum",
+            "Use displayName and icon from AppThemeModeExtension",
+            "Show visual preview chips or radio tiles for each theme",
+            "Theme changes should apply immediately and persist"
+          ],
+          "status": "pending"
+        },
+        {
+          "id": "subtask-3-3",
+          "description": "Add image recognition settings section (consolidate from settings_screen)",
+          "service": "flutter_app",
+          "files_to_modify": ["lib/screens/profile_screen.dart"],
+          "files_to_create": [],
+          "patterns_from": ["lib/screens/settings_screen.dart"],
+          "verification": {
+            "type": "command",
+            "command": "cd /Users/yeswanthvarmakanumuri/Downloads/SSS/sss && flutter analyze lib/screens/profile_screen.dart",
+            "expected": "No issues found"
+          },
+          "implementation_notes": [
+            "Copy image recognition settings section from settings_screen.dart",
+            "Include provider selection (TensorFlow Lite / ML Kit)",
+            "Include confidence threshold slider",
+            "Include heuristic fallback toggle",
+            "Follow same update pattern as settings_screen"
+          ],
+          "status": "pending"
+        },
+        {
+          "id": "subtask-3-4",
+          "description": "Add app info section with version, about, and feedback",
+          "service": "flutter_app",
+          "files_to_modify": ["lib/screens/profile_screen.dart"],
+          "files_to_create": [],
+          "patterns_from": ["lib/screens/settings_screen.dart"],
+          "verification": {
+            "type": "command",
+            "command": "cd /Users/yeswanthvarmakanumuri/Downloads/SSS/sss && flutter analyze lib/screens/profile_screen.dart",
+            "expected": "No issues found"
+          },
+          "implementation_notes": [
+            "Add App Info section header",
+            "Add Version ListTile showing app version",
+            "Add About ListTile with showAboutDialog",
+            "Add Send Feedback ListTile (can open email or show dialog)",
+            "Use package_info_plus or hardcode version for now"
+          ],
+          "status": "pending"
+        },
+        {
+          "id": "subtask-3-5",
+          "description": "Add unique visual polish (animated cards, subtle effects)",
+          "service": "flutter_app",
+          "files_to_modify": ["lib/screens/profile_screen.dart"],
+          "files_to_create": [],
+          "patterns_from": ["lib/theme/tokens/app_gradients.dart", "lib/theme/tokens/app_animations.dart"],
+          "verification": {
+            "type": "command",
+            "command": "cd /Users/yeswanthvarmakanumuri/Downloads/SSS/sss && flutter analyze lib/screens/profile_screen.dart",
+            "expected": "No issues found"
+          },
+          "implementation_notes": [
+            "Add FadeTransition or AnimatedOpacity for section appearance",
+            "Consider gradient-decorated cards for settings groups",
+            "Add subtle shadows using AppShadows tokens",
+            "Ensure animations are smooth and not distracting",
+            "Keep it simple - just enough for 'unique' feel"
+          ],
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": "phase-4-navigation",
+      "name": "Navigation Integration",
+      "type": "implementation",
+      "description": "Add profile screen access to main navigation",
+      "depends_on": ["phase-3-screen"],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-4-1",
+          "description": "Add Profile tab to MainTabScreen navigation",
+          "service": "flutter_app",
+          "files_to_modify": ["lib/screens/main_tab_screen.dart"],
+          "files_to_create": [],
+          "patterns_from": ["lib/screens/main_tab_screen.dart"],
+          "verification": {
+            "type": "command",
+            "command": "cd /Users/yeswanthvarmakanumuri/Downloads/SSS/sss && flutter analyze lib/screens/main_tab_screen.dart",
+            "expected": "No issues found"
+          },
+          "implementation_notes": [
+            "Import ProfileScreen",
+            "Add 5th tab for Profile with person icon",
+            "Update TabController length from 4 to 5",
+            "Add ProfileScreen() to TabBarView children",
+            "Consider using Icon(Icons.person) for the tab"
+          ],
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": "phase-5-integration",
+      "name": "Integration & Theme Wiring",
+      "type": "integration",
+      "description": "Wire theme changes to app-wide theme and verify end-to-end functionality",
+      "depends_on": ["phase-4-navigation"],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-5-1",
+          "description": "Wire theme preference to MaterialApp theme mode",
+          "service": "flutter_app",
+          "files_to_modify": ["lib/main.dart"],
+          "files_to_create": [],
+          "patterns_from": ["lib/main.dart", "lib/theme/app_theme.dart"],
+          "verification": {
+            "type": "command",
+            "command": "cd /Users/yeswanthvarmakanumuri/Downloads/SSS/sss && flutter analyze lib/main.dart",
+            "expected": "No issues found"
+          },
+          "implementation_notes": [
+            "MyApp needs to read theme preference from PreferencesService",
+            "Use AppTheme.buildTheme with selected AppThemeMode",
+            "May need to convert MyApp to StatefulWidget to handle theme changes",
+            "Consider using ValueListenableBuilder or Provider for reactive updates",
+            "Theme changes should apply immediately without restart"
+          ],
+          "status": "pending"
+        },
+        {
+          "id": "subtask-5-2",
+          "description": "End-to-end verification of profile functionality",
+          "service": "flutter_app",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "all_services": true,
+          "verification": {
+            "type": "e2e",
+            "steps": [
+              "Launch app and navigate to Profile tab",
+              "Verify gradient header displays with avatar",
+              "Edit display name and verify it persists",
+              "Change theme and verify it applies app-wide",
+              "Toggle image recognition settings",
+              "View About dialog",
+              "Restart app and verify all settings persisted"
+            ]
+          },
+          "implementation_notes": [
+            "Run flutter run and manually test all flows",
+            "Verify no console errors during navigation",
+            "Test on both iOS and Android if possible",
+            "Verify theme changes apply immediately"
+          ],
+          "status": "pending"
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total_phases": 5,
+    "total_subtasks": 10,
+    "services_involved": ["flutter_app"],
+    "parallelism": {
+      "max_parallel_phases": 1,
+      "parallel_groups": [],
+      "recommended_workers": 1,
+      "speedup_estimate": "Sequential execution (single service, dependent phases)"
+    },
+    "estimated_files_changed": 5,
+    "estimated_files_created": 1,
+    "startup_command": "source auto-claude/.venv/bin/activate && python auto-claude/run.py --spec 001 --parallel 1"
+  },
+  "verification_strategy": {
+    "risk_level": "low",
+    "skip_validation": false,
+    "test_creation_phase": "post_implementation",
+    "test_types_required": ["unit"],
+    "security_scanning_required": false,
+    "staging_deployment_required": false,
+    "acceptance_criteria": [
+      "All flutter analyze passes with no issues",
+      "Profile screen accessible from navigation",
+      "Settings persist across app restarts",
+      "Theme changes apply app-wide immediately",
+      "No console errors during navigation"
+    ],
+    "verification_steps": [
+      {
+        "name": "Static Analysis",
+        "command": "cd /Users/yeswanthvarmakanumuri/Downloads/SSS/sss && flutter analyze",
+        "expected_outcome": "No issues found",
+        "type": "lint",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Unit Tests",
+        "command": "cd /Users/yeswanthvarmakanumuri/Downloads/SSS/sss && flutter test",
+        "expected_outcome": "All tests pass",
+        "type": "test",
+        "required": true,
+        "blocking": true
+      }
+    ],
+    "reasoning": "Low risk UI feature with no security, API, or database implications. Single Flutter service with estimated 6 files. Minimal validation with static analysis and existing tests."
+  },
+  "qa_acceptance": {
+    "unit_tests": {
+      "required": true,
+      "commands": ["flutter test"],
+      "minimum_coverage": null
+    },
+    "integration_tests": {
+      "required": false,
+      "commands": [],
+      "services_to_test": []
+    },
+    "e2e_tests": {
+      "required": false,
+      "commands": [],
+      "flows": []
+    },
+    "browser_verification": {
+      "required": false,
+      "pages": []
+    },
+    "device_verification": {
+      "required": true,
+      "checks": [
+        "Profile screen renders on iOS Simulator",
+        "Profile screen renders on Android Emulator",
+        "Theme switching works on both platforms",
+        "Settings persist after app restart"
+      ]
+    },
+    "database_verification": {
+      "required": true,
+      "checks": [
+        "New AppSettings fields serialize correctly to Hive",
+        "Existing settings migrate gracefully (missing fields use defaults)"
+      ]
+    }
+  },
+  "qa_signoff": null
+}

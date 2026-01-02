@@ -1,0 +1,25 @@
+{
+  "active": true,
+  "spec": "001-a-simple-unique-profile-settings-screen",
+  "state": "building",
+  "subtasks": {
+    "completed": 0,
+    "total": 11,
+    "in_progress": 1,
+    "failed": 0
+  },
+  "phase": {
+    "current": "Data Model Extension",
+    "id": null,
+    "total": 2
+  },
+  "workers": {
+    "active": 0,
+    "max": 1
+  },
+  "session": {
+    "number": 2202,
+    "started_at": "2026-01-02T07:42:12.876778"
+  },
+  "last_update": "2026-01-02T12:00:01.541463"
+}

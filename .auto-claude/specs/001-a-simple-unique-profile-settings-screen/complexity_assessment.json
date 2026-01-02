@@ -1,0 +1,89 @@
+{
+  "complexity": "standard",
+  "workflow_type": "feature",
+  "confidence": 0.85,
+  "reasoning": "This is a UI enhancement task for a Flutter mobile app. An existing settings screen exists with basic functionality, and the project has a comprehensive theme system with 8 themes, gradients, shadows, and design tokens. The task involves redesigning/enhancing this screen to be more 'unique' while adding profile elements. No external integrations, database changes, or new dependencies are needed - just leveraging existing patterns.",
+
+  "analysis": {
+    "scope": {
+      "estimated_files": 4,
+      "estimated_services": 1,
+      "is_cross_cutting": false,
+      "notes": "Estimated files: 1 screen redesign (settings_screen.dart), 1-2 new widgets for profile/unique UI elements, possibly update main_tab_screen.dart for navigation. Single Flutter app, localized to UI layer."
+    },
+    "integrations": {
+      "external_services": [],
+      "new_dependencies": [],
+      "research_needed": false,
+      "notes": "No external integrations required. Standard Flutter UI development using existing Material Design 3 theme system with pre-built design tokens (AppColors, AppSpacing, AppRadius, AppGradients, etc.)."
+    },
+    "infrastructure": {
+      "docker_changes": false,
+      "database_changes": false,
+      "config_changes": false,
+      "notes": "No infrastructure changes needed. Existing PreferencesService handles settings persistence. No new environment variables or configuration required."
+    },
+    "knowledge": {
+      "patterns_exist": true,
+      "research_required": false,
+      "unfamiliar_tech": [],
+      "notes": "Rich patterns exist in codebase: settings_screen.dart provides template, theme system with AppTheme, AppColors, AppGradients, AppShadows, AppTypography. 8 theme variants already implemented. Standard Flutter widget patterns throughout."
+    },
+    "risk": {
+      "level": "low",
+      "concerns": [
+        "Navigation changes if adding new tab or modifying main_tab_screen",
+        "Design consistency with existing screens"
+      ],
+      "notes": "Low risk - pure UI changes with no security, data, or API implications. Existing settings functionality should be preserved while enhancing visual presentation."
+    }
+  },
+
+  "recommended_phases": [
+    "discovery",
+    "requirements",
+    "context",
+    "spec_writing",
+    "planning",
+    "validation"
+  ],
+
+  "flags": {
+    "needs_research": false,
+    "needs_self_critique": false,
+    "needs_infrastructure_setup": false
+  },
+
+  "validation_recommendations": {
+    "risk_level": "low",
+    "skip_validation": false,
+    "minimal_mode": true,
+    "test_types_required": ["unit"],
+    "security_scan_required": false,
+    "staging_deployment_required": false,
+    "reasoning": "UI-only changes with no security, API, or database implications. Single service, estimated 4 files. Minimal validation with unit tests for any new widget logic is sufficient. No sensitive data handling."
+  },
+
+  "codebase_context": {
+    "technology": "Flutter (Dart)",
+    "existing_patterns": {
+      "theme_system": "Comprehensive with 8 themes (light, dark, retro, high-contrast, ocean-blue, forest-green, sunset-orange, system)",
+      "design_tokens": "AppColors, AppSpacing, AppRadius, AppShadows, AppGradients, AppTypography, AppAnimations",
+      "settings_storage": "PreferencesService with AppSettings model and Hive adapter",
+      "ui_architecture": "Material Design 3 with custom ThemeExtension for gradients"
+    },
+    "current_settings_features": [
+      "Image recognition provider selection (TensorFlow Lite / ML Kit)",
+      "Heuristic fallback toggle",
+      "Confidence threshold slider",
+      "Info card showing current mode"
+    ],
+    "missing_profile_features": [
+      "User profile/avatar display",
+      "Theme selection UI",
+      "App version/about section"
+    ]
+  },
+
+  "created_at": "2026-01-02T12:00:00.000Z"
+}
