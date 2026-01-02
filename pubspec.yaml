@@ -58,7 +58,6 @@ dependencies:
   mobile_scanner: ^7.1.4
 
   # Deep linking
-  uni_links: ^0.5.1
 
   # NFC tag reading and writing
   nfc_manager: ^4.1.1

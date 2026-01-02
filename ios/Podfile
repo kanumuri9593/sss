@@ -48,6 +48,7 @@ post_install do |installer|
 
       # Enable library distribution for better compatibility
       config.build_settings["BUILD_LIBRARY_FOR_DISTRIBUTION"] = "YES"
+      config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = "arm64"
     end
   end
 end

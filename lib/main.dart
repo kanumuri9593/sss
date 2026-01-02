@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:uni_links/uni_links.dart';
+// import 'package:uni_links/uni_links.dart';
 import 'theme/app_theme.dart';
 import 'theme/app_theme_mode.dart';
 import 'models/app_settings.dart';
@@ -40,13 +40,13 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  StreamSubscription? _linkSubscription;
+  // StreamSubscription? _linkSubscription;
   AppSettings? _settings;
 
   @override
   void initState() {
     super.initState();
-    _initDeepLinks();
+    // _initDeepLinks();
     _initSettings();
   }
 
@@ -68,6 +68,7 @@ class _MyAppState extends State<MyApp> {
     }
   }
 
+  /*
   void _initDeepLinks() {
     // Handle initial link (app opened via deep link)
     getInitialLink().then((String? initialLink) {
@@ -88,6 +89,7 @@ class _MyAppState extends State<MyApp> {
       },
     );
   }
+  */
 
   void _handleDeepLink(String link) {
     debugPrint('Received deep link: $link');
@@ -201,7 +203,7 @@ class _MyAppState extends State<MyApp> {
 
   @override
   void dispose() {
-    _linkSubscription?.cancel();
+    // _linkSubscription?.cancel();
     PreferencesService.settingsNotifier.removeListener(_onSettingsChanged);
     super.dispose();
   }
