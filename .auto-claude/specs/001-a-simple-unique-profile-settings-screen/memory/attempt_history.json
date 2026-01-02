@@ -15466,6 +15466,30 @@
         }
       ],
       "status": "completed"
+    },
+    "subtask-3-3": {
+      "attempts": [
+        {
+          "session": 2207,
+          "timestamp": "2026-01-02T12:13:24.465442",
+          "approach": "Implemented: Add image recognition settings section (consolidate from settings_screen)",
+          "success": true,
+          "error": null
+        }
+      ],
+      "status": "completed"
+    },
+    "subtask-3-4": {
+      "attempts": [
+        {
+          "session": 2208,
+          "timestamp": "2026-01-02T12:15:09.807813",
+          "approach": "Implemented: Add app info section with version, about, and feedback",
+          "success": true,
+          "error": null
+        }
+      ],
+      "status": "completed"
     }
   },
   "stuck_subtasks": [
@@ -15478,6 +15502,6 @@
   ],
   "metadata": {
     "created_at": "2026-01-02T07:42:12.876069",
-    "last_updated": "2026-01-02T12:11:11.665154"
+    "last_updated": "2026-01-02T12:15:09.807832"
   }
 }

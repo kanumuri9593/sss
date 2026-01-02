@@ -219,7 +219,9 @@
             "Add Send Feedback ListTile (can open email or show dialog)",
             "Use package_info_plus or hardcode version for now"
           ],
-          "status": "pending"
+          "status": "completed",
+          "notes": "Added app info section with three items: Version (displays 1.0.0+1), About (shows app description dialog), and Feedback (shows feedback submission dialog). Follows existing code patterns with Card container, ListTile items, and consistent styling.",
+          "updated_at": "2026-01-02T17:14:54.714809+00:00"
         },
         {
           "id": "subtask-3-5",
@@ -445,5 +447,5 @@
     }
   },
   "qa_signoff": null,
-  "last_updated": "2026-01-02T17:13:02.822968+00:00"
+  "last_updated": "2026-01-02T17:14:54.714830+00:00"
 }

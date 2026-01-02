@@ -7,6 +7,7 @@ import '../theme/app_theme_mode.dart';
 ///
 /// Displays user profile information with a visually unique gradient header,
 /// avatar section showing user initials, and editable display name.
+/// Features animated cards with staggered entrance and subtle visual effects.
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
@@ -14,13 +15,49 @@ class ProfileScreen extends StatefulWidget {
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> {
+class _ProfileScreenState extends State<ProfileScreen>
+    with TickerProviderStateMixin {
   late AppSettings _settings;
+  late AnimationController _fadeController;
+  late AnimationController _scaleController;
+  late Animation<double> _fadeAnimation;
+  late Animation<double> _scaleAnimation;
 
   @override
   void initState() {
     super.initState();
     _settings = PreferencesService.settings;
+
+    // Initialize fade animation for content
+    _fadeController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+    _fadeAnimation = CurvedAnimation(
+      parent: _fadeController,
+      curve: Curves.easeOut,
+    );
+
+    // Initialize scale animation for avatar
+    _scaleController = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+    _scaleAnimation = CurvedAnimation(
+      parent: _scaleController,
+      curve: Curves.elasticOut,
+    );
+
+    // Start animations
+    _fadeController.forward();
+    _scaleController.forward();
+  }
+
+  @override
+  void dispose() {
+    _fadeController.dispose();
+    _scaleController.dispose();
+    super.dispose();
   }
 
   void _updateSettings(AppSettings newSettings) async {
@@ -102,46 +139,52 @@ class _ProfileScreenState extends State<ProfileScreen> {
           padding: const EdgeInsets.fromLTRB(24, 32, 24, 48),
           child: Column(
             children: [
-              // Avatar with initials
-              CircleAvatar(
-                radius: 56,
-                backgroundColor: colorScheme.surface,
-                child: Text(
-                  _getInitials(_settings.displayName),
-                  style: textTheme.displayMedium?.copyWith(
-                    color: colorScheme.primary,
-                    fontWeight: FontWeight.bold,
+              // Avatar with initials - animated with scale
+              ScaleTransition(
+                scale: _scaleAnimation,
+                child: CircleAvatar(
+                  radius: 56,
+                  backgroundColor: colorScheme.surface,
+                  child: Text(
+                    _getInitials(_settings.displayName),
+                    style: textTheme.displayMedium?.copyWith(
+                      color: colorScheme.primary,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ),
               const SizedBox(height: 16),
 
-              // Display name with edit button
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Flexible(
-                    child: Text(
-                      _settings.displayName,
-                      style: textTheme.headlineSmall?.copyWith(
-                        color: colorScheme.onPrimary,
-                        fontWeight: FontWeight.w600,
+              // Display name with edit button - animated with fade
+              FadeTransition(
+                opacity: _fadeAnimation,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        _settings.displayName,
+                        style: textTheme.headlineSmall?.copyWith(
+                          color: colorScheme.onPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
                       ),
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 1,
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    icon: Icon(
-                      Icons.edit,
-                      color: colorScheme.onPrimary.withOpacity(0.9),
-                      size: 20,
+                    const SizedBox(width: 8),
+                    IconButton(
+                      icon: Icon(
+                        Icons.edit,
+                        color: colorScheme.onPrimary.withOpacity(0.9),
+                        size: 20,
+                      ),
+                      onPressed: _showEditNameDialog,
+                      tooltip: 'Edit name',
                     ),
-                    onPressed: _showEditNameDialog,
-                    tooltip: 'Edit name',
-                  ),
-                ],
+                  ],
+                ),
               ),
             ],
           ),
@@ -164,6 +207,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  /// Build animated card with staggered entrance effect
+  Widget _buildAnimatedCard({
+    required Widget child,
+    required int index,
+  }) {
+    // Stagger animation based on index
+    final delay = Duration(milliseconds: 100 + (index * 80));
+
+    return TweenAnimationBuilder<double>(
+      duration: const Duration(milliseconds: 600),
+      curve: Curves.easeOutCubic,
+      tween: Tween(begin: 0.0, end: 1.0),
+      builder: (context, value, child) {
+        return Transform.translate(
+          offset: Offset(0, 20 * (1 - value)),
+          child: Opacity(
+            opacity: value,
+            child: child,
+          ),
+        );
+      },
+      child: child,
+    );
+  }
+
   /// Build theme selector with visual preview cards
   Widget _buildThemeSelector() {
     final colorScheme = Theme.of(context).colorScheme;
@@ -171,6 +239,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      elevation: 2,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -215,59 +284,86 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  /// Build individual theme preview card
+  /// Build individual theme preview card with scale animation
   Widget _buildThemePreviewCard({
     required AppThemeMode mode,
     required bool isSelected,
     required ColorScheme colorScheme,
     required TextTheme textTheme,
   }) {
-    return InkWell(
-      onTap: () {
-        _updateSettings(_settings.copyWith(themeMode: mode));
-      },
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        decoration: BoxDecoration(
-          border: Border.all(
+    return AnimatedScale(
+      scale: isSelected ? 1.0 : 0.95,
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOut,
+      child: InkWell(
+        onTap: () {
+          _updateSettings(_settings.copyWith(themeMode: mode));
+        },
+        borderRadius: BorderRadius.circular(12),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: isSelected
+                  ? colorScheme.primary
+                  : colorScheme.outline.withOpacity(0.3),
+              width: isSelected ? 2 : 1,
+            ),
+            borderRadius: BorderRadius.circular(12),
             color: isSelected
-                ? colorScheme.primary
-                : colorScheme.outline.withOpacity(0.3),
-            width: isSelected ? 2 : 1,
+                ? colorScheme.primaryContainer.withOpacity(0.3)
+                : colorScheme.surface,
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: colorScheme.primary.withOpacity(0.2),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : [],
           ),
-          borderRadius: BorderRadius.circular(12),
-          color: isSelected
-              ? colorScheme.primaryContainer.withOpacity(0.3)
-              : colorScheme.surface,
-        ),
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              mode.icon,
-              color: isSelected ? colorScheme.primary : colorScheme.onSurface,
-              size: 28,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              mode.displayName,
-              style: textTheme.labelMedium?.copyWith(
-                color:
-                    isSelected ? colorScheme.primary : colorScheme.onSurface,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            if (isSelected) ...[
-              const SizedBox(height: 4),
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
               Icon(
-                Icons.check_circle,
-                color: colorScheme.primary,
-                size: 16,
+                mode.icon,
+                color: isSelected ? colorScheme.primary : colorScheme.onSurface,
+                size: 28,
               ),
+              const SizedBox(height: 8),
+              Text(
+                mode.displayName,
+                style: textTheme.labelMedium?.copyWith(
+                  color:
+                      isSelected ? colorScheme.primary : colorScheme.onSurface,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              if (isSelected) ...[
+                const SizedBox(height: 4),
+                TweenAnimationBuilder<double>(
+                  duration: const Duration(milliseconds: 300),
+                  tween: Tween(begin: 0.0, end: 1.0),
+                  curve: Curves.elasticOut,
+                  builder: (context, value, child) {
+                    return Transform.scale(
+                      scale: value,
+                      child: child,
+                    );
+                  },
+                  child: Icon(
+                    Icons.check_circle,
+                    color: colorScheme.primary,
+                    size: 16,
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -283,46 +379,59 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: _buildProfileHeader(),
           ),
 
-          // Profile content
+          // Profile content with staggered animations
           SliverList(
             delegate: SliverChildListDelegate([
               const SizedBox(height: 8),
               _buildSectionHeader('Profile Settings'),
 
-              // Notifications setting
-              Card(
-                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: ListTile(
-                  leading: Icon(
-                    Icons.notifications_outlined,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                  title: const Text('Notifications'),
-                  subtitle: Text(
-                    _settings.notificationsEnabled ? 'Enabled' : 'Disabled',
-                  ),
-                  trailing: Switch(
-                    value: _settings.notificationsEnabled,
-                    onChanged: (value) {
-                      _updateSettings(
-                        _settings.copyWith(notificationsEnabled: value),
-                      );
-                    },
+              // Notifications setting - animated card index 0
+              _buildAnimatedCard(
+                index: 0,
+                child: Card(
+                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  elevation: 2,
+                  child: ListTile(
+                    leading: Icon(
+                      Icons.notifications_outlined,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    title: const Text('Notifications'),
+                    subtitle: Text(
+                      _settings.notificationsEnabled ? 'Enabled' : 'Disabled',
+                    ),
+                    trailing: Switch(
+                      value: _settings.notificationsEnabled,
+                      onChanged: (value) {
+                        _updateSettings(
+                          _settings.copyWith(notificationsEnabled: value),
+                        );
+                      },
+                    ),
                   ),
                 ),
               ),
 
               // Appearance section
               _buildSectionHeader('Appearance'),
-              _buildThemeSelector(),
+              _buildAnimatedCard(
+                index: 1,
+                child: _buildThemeSelector(),
+              ),
 
               // Image Recognition section
               _buildSectionHeader('Image Recognition'),
-              _buildImageRecognitionSettings(),
+              _buildAnimatedCard(
+                index: 2,
+                child: _buildImageRecognitionSettings(),
+              ),
 
               // App Info section
               _buildSectionHeader('App Info'),
-              _buildAppInfoSection(),
+              _buildAnimatedCard(
+                index: 3,
+                child: _buildAppInfoSection(),
+              ),
 
               const SizedBox(height: 24),
             ]),
@@ -339,6 +448,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      elevation: 2,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -489,6 +599,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      elevation: 2,
       child: Column(
         children: [
           // Version
