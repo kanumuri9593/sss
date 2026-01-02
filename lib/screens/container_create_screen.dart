@@ -6,22 +6,22 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../models/container.dart' as models;
 import '../services/container_service.dart';
 import '../services/qr_service.dart';
+import '../services/nfc_service.dart';
+import '../services/nfc_tag_storage_service.dart';
 import '../models/qr_data.dart';
 import '../utils/file_utils.dart';
 import '../services/image_recognition_service.dart';
 import '../widgets/tag_editor_widget.dart';
+import 'nfc_tag_management_screen.dart';
 
 /// Container Create/Edit Screen
-/// 
+///
 /// Allows users to create or edit containers with photo, type selection,
 /// and QR code generation. After creation, shows QR code below with edit/download options.
 class ContainerCreateScreen extends StatefulWidget {
   final models.Container? container;
 
-  const ContainerCreateScreen({
-    super.key,
-    this.container,
-  });
+  const ContainerCreateScreen({super.key, this.container});
 
   @override
   State<ContainerCreateScreen> createState() => _ContainerCreateScreenState();
@@ -49,12 +49,20 @@ class _ContainerCreateScreenState extends State<ContainerCreateScreen> {
   List<models.Container> _availableParents = [];
   List<String> _tags = [];
 
+  // NFC-related state
+  bool _isNFCAvailable = false;
+  NFCTagStoredRegistration? _linkedNFCTag;
+  String? _nfcTagId;
+
   @override
   void initState() {
     super.initState();
     // Initialize image recognition service
     ImageRecognitionService.initialize();
-    
+
+    // Initialize NFC
+    _initializeNFC();
+
     if (widget.container != null) {
       _nameController.text = widget.container!.name;
       _descriptionController.text = widget.container!.description ?? '';
@@ -63,9 +71,28 @@ class _ContainerCreateScreenState extends State<ContainerCreateScreen> {
       _photoPath = widget.container!.photoPath;
       _selectedParentContainerId = widget.container!.parentContainerId;
       _createdContainer = widget.container;
+      _nfcTagId = widget.container!.nfcTagId;
       _loadQRCode();
+      _loadLinkedNFCTag();
     }
     _loadAvailableParents();
+  }
+
+  Future<void> _initializeNFC() async {
+    try {
+      await NFCTagStorageService.initialize();
+      _isNFCAvailable = await NFCService.isNFCAvailable();
+      if (mounted) setState(() {});
+    } catch (e) {
+      debugPrint('[ContainerCreate] Error initializing NFC: $e');
+    }
+  }
+
+  void _loadLinkedNFCTag() {
+    if (_nfcTagId != null) {
+      _linkedNFCTag = NFCTagStorageService.getTagByPhysicalId(_nfcTagId!);
+      if (mounted) setState(() {});
+    }
   }
 
   @override
@@ -77,7 +104,7 @@ class _ContainerCreateScreenState extends State<ContainerCreateScreen> {
 
   void _loadQRCode() {
     if (_createdContainer == null) return;
-    
+
     final container = _createdContainer!;
     if (container.qrCodeId != null) {
       _qrId = container.qrCodeId;
@@ -96,17 +123,19 @@ class _ContainerCreateScreenState extends State<ContainerCreateScreen> {
 
   void _generateQRCode() {
     if (_createdContainer == null) return;
-    
+
     final container = _createdContainer!;
     final deepLink = container.buildDeepLink();
-    
+
     // Generate QR code with deep link
     _qrDeepLink = QRService.generateDeepLink(
       data: deepLink,
       category: 'Container',
-      customIdentifier: _qrCustomIdentifier.isEmpty ? null : _qrCustomIdentifier,
+      customIdentifier: _qrCustomIdentifier.isEmpty
+          ? null
+          : _qrCustomIdentifier,
     );
-    
+
     // Extract QR ID from deep link
     _qrId = QRData.extractIdFromDeepLink(_qrDeepLink!);
     if (_qrId != null) {
@@ -127,6 +156,7 @@ class _ContainerCreateScreenState extends State<ContainerCreateScreen> {
           addNested(child.id);
         }
       }
+
       addNested(widget.container!.id);
       _availableParents = allContainers
           .where((c) => !excludeIds.contains(c.id))
@@ -182,11 +212,14 @@ class _ContainerCreateScreenState extends State<ContainerCreateScreen> {
 
           // Auto-generate tags from image
           try {
-            final generatedTags = await ImageRecognitionService.processImage(savedPath);
-            
+            final generatedTags = await ImageRecognitionService.processImage(
+              savedPath,
+            );
+
             // Also add container type-based tags if not already present
-            final containerTypeTags = ImageRecognitionService.generateTagsForContainer(_selectedType);
-            
+            final containerTypeTags =
+                ImageRecognitionService.generateTagsForContainer(_selectedType);
+
             // Merge tags (avoid duplicates)
             final allTags = <String>[];
             for (final tag in generatedTags) {
@@ -199,11 +232,13 @@ class _ContainerCreateScreenState extends State<ContainerCreateScreen> {
                 allTags.add(tag);
               }
             }
-            
+
             // Merge with existing tags
             final updatedTags = List<String>.from(_tags);
             for (final tag in allTags.take(5)) {
-              if (!updatedTags.any((t) => t.toLowerCase() == tag.toLowerCase())) {
+              if (!updatedTags.any(
+                (t) => t.toLowerCase() == tag.toLowerCase(),
+              )) {
                 updatedTags.add(tag);
               }
             }
@@ -214,10 +249,13 @@ class _ContainerCreateScreenState extends State<ContainerCreateScreen> {
           } catch (e) {
             debugPrint('Error generating tags: $e');
             // Fallback: add container type tags
-            final containerTypeTags = ImageRecognitionService.generateTagsForContainer(_selectedType);
+            final containerTypeTags =
+                ImageRecognitionService.generateTagsForContainer(_selectedType);
             final updatedTags = List<String>.from(_tags);
             for (final tag in containerTypeTags) {
-              if (!updatedTags.any((t) => t.toLowerCase() == tag.toLowerCase())) {
+              if (!updatedTags.any(
+                (t) => t.toLowerCase() == tag.toLowerCase(),
+              )) {
                 updatedTags.add(tag);
               }
             }
@@ -229,9 +267,9 @@ class _ContainerCreateScreenState extends State<ContainerCreateScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error picking image: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error picking image: $e')));
       }
     } finally {
       if (mounted) {
@@ -289,17 +327,19 @@ class _ContainerCreateScreenState extends State<ContainerCreateScreen> {
         // Don't navigate away - stay to show QR code
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(widget.container != null
-                ? 'Container updated'
-                : 'Container created! QR code generated below.'),
+            content: Text(
+              widget.container != null
+                  ? 'Container updated'
+                  : 'Container created! QR code generated below.',
+            ),
           ),
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
         setState(() {
           _isLoading = false;
         });
@@ -350,16 +390,17 @@ class _ContainerCreateScreenState extends State<ContainerCreateScreen> {
       }
 
       // Export as PNG
-      final fileName = 'container_${_createdContainer!.name}_qr_${DateTime.now().millisecondsSinceEpoch}.png';
+      final fileName =
+          'container_${_createdContainer!.name}_qr_${DateTime.now().millisecondsSinceEpoch}.png';
       final filePath = await QRService.exportAsPNG(
         imageBytes: imageBytes,
         fileName: fileName,
       );
 
       if (filePath != null && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('QR code saved to $filePath')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('QR code saved to $filePath')));
       }
     } catch (e) {
       if (mounted) {
@@ -403,11 +444,131 @@ class _ContainerCreateScreenState extends State<ContainerCreateScreen> {
       }
     } catch (e) {
       if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error sharing QR code: $e')));
+      }
+    }
+  }
+
+  Future<void> _registerNFCTag() async {
+    if (_createdContainer == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please create the container first')),
+      );
+      return;
+    }
+
+    if (!_isNFCAvailable) {
+      _showNFCNotAvailableDialog();
+      return;
+    }
+
+    final result = await Navigator.push<NFCTagStoredRegistration?>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => NFCTagManagementScreen(
+          containerId: _createdContainer!.id,
+          returnOnSuccess: true,
+        ),
+      ),
+    );
+
+    if (result != null) {
+      setState(() {
+        _linkedNFCTag = result;
+        _nfcTagId = result.tagId;
+      });
+
+      // Update container with NFC tag ID
+      final updated = _createdContainer!.copyWith(nfcTagId: result.tagId);
+      await ContainerService.updateContainer(updated);
+      _createdContainer = updated;
+
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error sharing QR code: $e')),
+          const SnackBar(content: Text('NFC tag linked successfully!')),
         );
       }
     }
+  }
+
+  Future<void> _unlinkNFCTag() async {
+    if (_createdContainer == null || _nfcTagId == null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Unlink NFC Tag'),
+        content: const Text('Remove the NFC tag link from this container?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Unlink'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await ContainerService.unlinkNFCTag(_createdContainer!.id);
+      if (_linkedNFCTag != null) {
+        await NFCTagStorageService.unlinkTagFromContainer(_linkedNFCTag!.id);
+      }
+
+      setState(() {
+        _linkedNFCTag = null;
+        _nfcTagId = null;
+      });
+
+      // Reload container
+      _createdContainer = ContainerService.getContainer(_createdContainer!.id);
+
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('NFC tag unlinked')));
+      }
+    }
+  }
+
+  void _showNFCNotAvailableDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.nfc_rounded, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('NFC Not Available'),
+          ],
+        ),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('NFC is not available or enabled on this device.'),
+            SizedBox(height: 16),
+            Text(
+              'To enable NFC:\n'
+              '• iOS: Go to Settings > General > NFC\n'
+              '• Android: Go to Settings > Connected devices > NFC',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -452,14 +613,10 @@ class _ContainerCreateScreenState extends State<ContainerCreateScreen> {
                     strokeAlign: BorderSide.strokeAlignInside,
                   ),
                 ),
-                child: _photoPath != null &&
-                        File(_photoPath!).existsSync()
+                child: _photoPath != null && File(_photoPath!).existsSync()
                     ? ClipRRect(
                         borderRadius: BorderRadius.circular(12),
-                        child: Image.file(
-                          File(_photoPath!),
-                          fit: BoxFit.cover,
-                        ),
+                        child: Image.file(File(_photoPath!), fit: BoxFit.cover),
                       )
                     : Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -499,9 +656,7 @@ class _ContainerCreateScreenState extends State<ContainerCreateScreen> {
             // Type Selector
             DropdownButtonFormField<models.ContainerType>(
               initialValue: _selectedType,
-              decoration: const InputDecoration(
-                labelText: 'Container Type *',
-              ),
+              decoration: const InputDecoration(labelText: 'Container Type *'),
               items: models.ContainerType.values.map((type) {
                 return DropdownMenuItem(
                   value: type,
@@ -569,9 +724,7 @@ class _ContainerCreateScreenState extends State<ContainerCreateScreen> {
             ),
             if (_isProcessingImage) ...[
               const SizedBox(height: 8),
-              const Center(
-                child: CircularProgressIndicator(),
-              ),
+              const Center(child: CircularProgressIndicator()),
             ],
             const SizedBox(height: 24),
             // Save Button
@@ -613,7 +766,10 @@ class _ContainerCreateScreenState extends State<ContainerCreateScreen> {
                   child: LayoutBuilder(
                     builder: (context, constraints) {
                       // Make QR code responsive - use 80% of available width, max 250
-                      final qrSize = (constraints.maxWidth * 0.8).clamp(200.0, 250.0);
+                      final qrSize = (constraints.maxWidth * 0.8).clamp(
+                        200.0,
+                        250.0,
+                      );
                       return _buildQRWidget(size: qrSize);
                     },
                   ),
@@ -643,6 +799,126 @@ class _ContainerCreateScreenState extends State<ContainerCreateScreen> {
                 ],
               ),
               const SizedBox(height: 32),
+              // NFC Tag Section
+              Divider(thickness: 2),
+              const SizedBox(height: 16),
+              Text(
+                'NFC Tag (Optional)',
+                style: theme.textTheme.titleLarge,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Link a physical NFC tag for instant access by tapping',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              if (_linkedNFCTag != null || _nfcTagId != null) ...[
+                // Show linked NFC tag info
+                Card(
+                  color: theme.colorScheme.primaryContainer,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            CircleAvatar(
+                              backgroundColor: Colors.green,
+                              child: const Icon(Icons.nfc, color: Colors.white),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _linkedNFCTag?.title ?? 'NFC Tag Linked',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  Text(
+                                    'Tag ID: ${(_nfcTagId ?? '').substring(0, (_nfcTagId?.length ?? 0).clamp(0, 12))}...',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color:
+                                          theme.colorScheme.onPrimaryContainer,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              onPressed: _unlinkNFCTag,
+                              icon: const Icon(Icons.link_off),
+                              tooltip: 'Unlink NFC Tag',
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: _registerNFCTag,
+                      icon: const Icon(Icons.swap_horiz),
+                      label: const Text('Change Tag'),
+                    ),
+                  ],
+                ),
+              ] else ...[
+                // No NFC tag linked - show register button
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      color: theme.colorScheme.outline,
+                      style: BorderStyle.solid,
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.nfc_rounded,
+                        size: 48,
+                        color: _isNFCAvailable
+                            ? theme.colorScheme.primary
+                            : theme.colorScheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        _isNFCAvailable
+                            ? 'No NFC tag linked yet'
+                            : 'NFC not available on this device',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        onPressed: _isNFCAvailable
+                            ? _registerNFCTag
+                            : _showNFCNotAvailableDialog,
+                        icon: const Icon(Icons.add),
+                        label: const Text('Register NFC Tag'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _isNFCAvailable ? null : Colors.grey,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 32),
             ],
           ],
         ),
@@ -652,7 +928,7 @@ class _ContainerCreateScreenState extends State<ContainerCreateScreen> {
 
   Widget _buildQRWidget({double size = 250}) {
     if (_qrDeepLink == null) return const SizedBox.shrink();
-    
+
     // Use QrImageView directly with the existing deep link
     final qrWidget = QrImageView(
       data: _qrDeepLink!,
@@ -661,11 +937,11 @@ class _ContainerCreateScreenState extends State<ContainerCreateScreen> {
       foregroundColor: _qrForegroundColor,
       errorCorrectionLevel: QrErrorCorrectLevel.M,
     );
-    
+
     if (_qrCustomIdentifier.isEmpty) {
       return qrWidget;
     }
-    
+
     // Add identifier overlay
     return Stack(
       alignment: Alignment.center,
@@ -682,7 +958,9 @@ class _ContainerCreateScreenState extends State<ContainerCreateScreen> {
             child: Text(
               _qrCustomIdentifier,
               style: TextStyle(
-                fontSize: _qrCustomIdentifier.length > 1 ? size * 0.15 : size * 0.12,
+                fontSize: _qrCustomIdentifier.length > 1
+                    ? size * 0.15
+                    : size * 0.12,
                 fontWeight: FontWeight.bold,
                 color: _qrIdentifierColor,
               ),
@@ -732,7 +1010,9 @@ class _QREditDialogState extends State<_QREditDialog> {
   @override
   void initState() {
     super.initState();
-    _identifierController = TextEditingController(text: widget.customIdentifier);
+    _identifierController = TextEditingController(
+      text: widget.customIdentifier,
+    );
     _foregroundColor = widget.foregroundColor;
     _backgroundColor = widget.backgroundColor;
     _identifierColor = widget.identifierColor;
