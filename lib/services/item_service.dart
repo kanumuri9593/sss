@@ -134,60 +134,81 @@ class ItemService {
   }
 
   /// Search items by text (name, description, tags)
-  static List<Item> searchItems(String query) {
+  static Future<List<Item>> searchItems(String query) async {
     if (query.isEmpty) {
       return getAllItems();
     }
 
     try {
       final box = StorageService.itemsBox;
-      final lowerQuery = query.toLowerCase();
+      final items = box.values.toList();
       
-      return box.values.where((item) {
-        // Search by name
-        if (item.name.toLowerCase().contains(lowerQuery)) {
-          return true;
-        }
-
-        // Search by description
-        if (item.description != null &&
-            item.description!.toLowerCase().contains(lowerQuery)) {
-          return true;
-        }
-
-        // Search by tags
-        for (final tag in item.tags) {
-          if (tag.toLowerCase().contains(lowerQuery)) {
-            return true;
-          }
-        }
-
-        return false;
-      }).toList();
+      return await compute(_filterItems, {
+        'items': items,
+        'query': query,
+      });
     } catch (e) {
       debugPrint('[ItemService] Error searching items: $e');
       return [];
     }
   }
 
+  static List<Item> _filterItems(Map<String, dynamic> params) {
+    final items = params['items'] as List<Item>;
+    final lowerQuery = (params['query'] as String).toLowerCase();
+
+    return items.where((item) {
+      // Search by name
+      if (item.name.toLowerCase().contains(lowerQuery)) {
+        return true;
+      }
+
+      // Search by description
+      if (item.description != null &&
+          item.description!.toLowerCase().contains(lowerQuery)) {
+        return true;
+      }
+
+      // Search by tags
+      for (final tag in item.tags) {
+        if (tag.toLowerCase().contains(lowerQuery)) {
+          return true;
+        }
+      }
+
+      return false;
+    }).toList();
+  }
+
   /// Search items by tags
-  static List<Item> searchItemsByTags(List<String> tags) {
+  static Future<List<Item>> searchItemsByTags(List<String> tags) async {
     if (tags.isEmpty) {
       return getAllItems();
     }
 
     try {
       final box = StorageService.itemsBox;
-      final lowerTags = tags.map((t) => t.toLowerCase()).toSet();
+      final items = box.values.toList();
       
-      return box.values.where((item) {
-        final itemTags = item.tags.map((t) => t.toLowerCase()).toSet();
-        return lowerTags.intersection(itemTags).isNotEmpty;
-      }).toList();
+      return await compute(_filterItemsByTags, {
+        'items': items,
+        'tags': tags,
+      });
     } catch (e) {
       debugPrint('[ItemService] Error searching items by tags: $e');
       return [];
     }
+  }
+
+  static List<Item> _filterItemsByTags(Map<String, dynamic> params) {
+    final items = params['items'] as List<Item>;
+    final tags = params['tags'] as List<String>;
+    final lowerTags = tags.map((t) => t.toLowerCase()).toSet();
+    
+    return items.where((item) {
+      final itemTags = item.tags.map((t) => t.toLowerCase()).toSet();
+      return lowerTags.intersection(itemTags).isNotEmpty;
+    }).toList();
   }
 
   /// Search items in a specific container

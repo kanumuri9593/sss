@@ -152,17 +152,13 @@ class ImageRecognitionService {
     double confidenceThreshold,
   ) async {
     try {
-      // Read and decode image
-      final imageBytes = await imageFile.readAsBytes();
-      final image = img.decodeImage(imageBytes);
-      if (image == null) {
-        debugPrint('[ImageRecognition] Failed to decode image');
+      // Run heavy image processing in a background isolate
+      final inputBuffer = await compute(_preprocessImageIsolate, imageFile.path);
+      
+      if (inputBuffer == null) {
+        debugPrint('[ImageRecognition] Failed to preprocess image');
         return _generateHeuristicTags(null);
       }
-
-      // Preprocess image: resize to 224x224 and normalize
-      final resized = img.copyResize(image, width: 224, height: 224);
-      final inputBuffer = _preprocessImage(resized);
 
       // Get model output shape
       final outputTensor = _interpreter!.getOutputTensor(0);
@@ -172,7 +168,7 @@ class ImageRecognitionService {
       final outputSize = outputShape.reduce((a, b) => a * b);
       final output = List.filled(outputSize, 0.0);
 
-      // Run inference
+      // Run inference (this is fast and can run on main thread, or TFLite plugin handles threads)
       _interpreter!.run(inputBuffer, output);
 
       // Get top 5 predictions
@@ -218,6 +214,23 @@ class ImageRecognitionService {
     } catch (e) {
       debugPrint('[ImageRecognition] Error in TFLite processing: $e');
       return _generateHeuristicTags(null);
+    }
+  }
+
+  /// Entry point for the isolate to preprocess the image
+  static Future<List<List<List<List<double>>>>?> _preprocessImageIsolate(String imagePath) async {
+    try {
+      final file = File(imagePath);
+      final imageBytes = await file.readAsBytes();
+      final image = img.decodeImage(imageBytes);
+      if (image == null) return null;
+
+      // Preprocess image: resize to 224x224 and normalize
+      final resized = img.copyResize(image, width: 224, height: 224);
+      return _preprocessImage(resized);
+    } catch (e) {
+      debugPrint('[ImageRecognition] Error in isolate preprocessing: $e');
+      return null;
     }
   }
 

@@ -35,23 +35,33 @@ class CacheService {
     final startTime = DateTime.now();
 
     try {
-      // Get all containers to compute counts
+      // Clear existing caches to be safe
+      _itemCounts.clear();
+      _childContainerCounts.clear();
+
+      // Get all items and count them by container
+      // O(items) complexity instead of O(items * containers)
+      final allItems = ItemService.getAllItems();
+      for (final item in allItems) {
+        _itemCounts[item.containerId] = (_itemCounts[item.containerId] ?? 0) + 1;
+      }
+
+      // Get all containers and count them by parent
+      // O(containers) complexity
       final allContainers = ContainerService.getAllContainers();
-
-      // Pre-compute item counts for all containers
       for (final container in allContainers) {
-        final itemCount = ItemService.getItemsByContainer(container.id).length;
-        _itemCounts[container.id] = itemCount;
-
-        final childCount = ContainerService.getChildContainers(container.id).length;
-        _childContainerCounts[container.id] = childCount;
+        if (container.parentContainerId != null) {
+          _childContainerCounts[container.parentContainerId!] = 
+              (_childContainerCounts[container.parentContainerId!] ?? 0) + 1;
+        }
       }
 
       _isInitialized = true;
 
       final duration = DateTime.now().difference(startTime);
       debugPrint('[CacheService] Cache initialized in ${duration.inMilliseconds}ms');
-      debugPrint('[CacheService] Cached ${_itemCounts.length} container counts');
+      debugPrint('[CacheService] Cached item counts for ${_itemCounts.length} containers');
+      debugPrint('[CacheService] Cached child counts for ${_childContainerCounts.length} containers');
     } catch (e) {
       debugPrint('[CacheService] Error initializing cache: $e');
     }

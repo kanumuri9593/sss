@@ -77,7 +77,7 @@ class _SearchScreenState extends State<SearchScreen> {
     });
   }
 
-  void _performSearch() {
+  Future<void> _performSearch() async {
     if (_searchQuery.isEmpty) {
       setState(() {
         _itemResults = [];
@@ -91,14 +91,16 @@ class _SearchScreenState extends State<SearchScreen> {
     });
 
     // Search items and containers
-    final items = ItemService.searchItems(_searchQuery);
-    final containers = ContainerService.searchContainers(_searchQuery);
+    final items = await ItemService.searchItems(_searchQuery);
+    final containers = await ContainerService.searchContainers(_searchQuery);
 
-    setState(() {
-      _itemResults = items;
-      _containerResults = containers;
-      _isSearching = false;
-    });
+    if (mounted) {
+      setState(() {
+        _itemResults = items;
+        _containerResults = containers;
+        _isSearching = false;
+      });
+    }
   }
 
   Future<void> _searchByImage() async {
@@ -144,8 +146,8 @@ class _SearchScreenState extends State<SearchScreen> {
 
           if (labels.isNotEmpty) {
             // Search by tags
-            final items = ItemService.searchItemsByTags(labels);
-            final containers = ContainerService.searchContainersByTags(labels);
+            final items = await ItemService.searchItemsByTags(labels);
+            final containers = await ContainerService.searchContainersByTags(labels);
 
           setState(() {
             _itemResults = items;

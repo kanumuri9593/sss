@@ -66,7 +66,7 @@ class _ContainerListScreenState extends State<ContainerListScreen>
     }
   }
 
-  void _loadContainers() {
+  Future<void> _loadContainers() async {
     try {
       // Ensure storage is initialized
       if (!StorageService.isInitialized) {
@@ -81,17 +81,20 @@ class _ContainerListScreenState extends State<ContainerListScreen>
         '[ContainerListScreen] Loaded ${containers.length} containers',
       );
 
+      // Reapply search filter if active
+      List<models.Container> filtered;
+      if (_searchController.text.isEmpty) {
+        filtered = containers;
+      } else {
+        filtered = await ContainerService.searchContainers(
+          _searchController.text,
+        );
+      }
+
       if (mounted) {
         setState(() {
           _containers = containers;
-          // Reapply search filter if active
-          if (_searchController.text.isEmpty) {
-            _filteredContainers = _containers;
-          } else {
-            _filteredContainers = ContainerService.searchContainers(
-              _searchController.text,
-            );
-          }
+          _filteredContainers = filtered;
         });
       }
     } catch (e) {
@@ -110,16 +113,22 @@ class _ContainerListScreenState extends State<ContainerListScreen>
   void _onSearchChanged() {
     // Debounce search to avoid excessive rebuilds
     _searchDebounceTimer?.cancel();
-    _searchDebounceTimer = Timer(const Duration(milliseconds: 300), () {
+    _searchDebounceTimer = Timer(const Duration(milliseconds: 300), () async {
       if (!mounted) return;
       final query = _searchController.text;
-      setState(() {
-        if (query.isEmpty) {
-          _filteredContainers = _containers;
-        } else {
-          _filteredContainers = ContainerService.searchContainers(query);
-        }
-      });
+      
+      List<models.Container> results;
+      if (query.isEmpty) {
+        results = _containers;
+      } else {
+        results = await ContainerService.searchContainers(query);
+      }
+      
+      if (mounted) {
+        setState(() {
+          _filteredContainers = results;
+        });
+      }
     });
   }
 
