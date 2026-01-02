@@ -165,7 +165,9 @@
             "Show visual preview chips or radio tiles for each theme",
             "Theme changes should apply immediately and persist"
           ],
-          "status": "pending"
+          "status": "completed",
+          "notes": "Added theme selector section with visual theme preview cards. The implementation includes a Card widget with three theme options (Light, Dark, System) displayed as interactive preview cards. Each card shows the theme icon, name, and visual selection state with borders, background colors, and check icons. The theme selector is integrated into the Appearance section of the profile screen.",
+          "updated_at": "2026-01-02T17:10:54.547452+00:00"
         },
         {
           "id": "subtask-3-3",
@@ -441,5 +443,5 @@
     }
   },
   "qa_signoff": null,
-  "last_updated": "2026-01-02T17:08:55.716799+00:00"
+  "last_updated": "2026-01-02T17:10:54.547472+00:00"
 }

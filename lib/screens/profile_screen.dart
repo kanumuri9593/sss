@@ -316,10 +316,165 @@ class _ProfileScreenState extends State<ProfileScreen> {
               _buildSectionHeader('Appearance'),
               _buildThemeSelector(),
 
+              // Image Recognition section
+              _buildSectionHeader('Image Recognition'),
+              _buildImageRecognitionSettings(),
+
               const SizedBox(height: 24),
             ]),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Build image recognition settings section
+  Widget _buildImageRecognitionSettings() {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Provider selection
+            Row(
+              children: [
+                Icon(
+                  Icons.camera_alt_outlined,
+                  color: colorScheme.primary,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Provider',
+                  style: textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // Provider options
+            ...ImageRecognitionProvider.values.map((provider) {
+              final isSelected = _settings.imageRecognitionProvider == provider;
+              final providerName = provider == ImageRecognitionProvider.tensorflowLite
+                  ? 'TensorFlow Lite'
+                  : 'ML Kit';
+              final providerDescription = provider == ImageRecognitionProvider.tensorflowLite
+                  ? 'On-device ML with TensorFlow'
+                  : 'Google ML Kit framework';
+
+              return RadioListTile<ImageRecognitionProvider>(
+                value: provider,
+                groupValue: _settings.imageRecognitionProvider,
+                onChanged: (value) {
+                  if (value != null) {
+                    _updateSettings(
+                      _settings.copyWith(imageRecognitionProvider: value),
+                    );
+                  }
+                },
+                title: Text(providerName),
+                subtitle: Text(
+                  providerDescription,
+                  style: textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurface.withOpacity(0.6),
+                  ),
+                ),
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+              );
+            }).toList(),
+
+            const Divider(height: 24),
+
+            // Confidence threshold slider
+            Text(
+              'Confidence Threshold',
+              style: textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Minimum confidence level for tag recognition (${(_settings.confidenceThreshold * 100).toInt()}%)',
+              style: textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurface.withOpacity(0.6),
+              ),
+            ),
+            Slider(
+              value: _settings.confidenceThreshold,
+              min: 0.1,
+              max: 0.9,
+              divisions: 16,
+              label: '${(_settings.confidenceThreshold * 100).toInt()}%',
+              onChanged: (value) {
+                _updateSettings(
+                  _settings.copyWith(confidenceThreshold: value),
+                );
+              },
+            ),
+
+            const Divider(height: 24),
+
+            // Max tags slider
+            Text(
+              'Maximum Tags',
+              style: textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Maximum number of tags per image (${_settings.maxTags})',
+              style: textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurface.withOpacity(0.6),
+              ),
+            ),
+            Slider(
+              value: _settings.maxTags.toDouble(),
+              min: 1,
+              max: 10,
+              divisions: 9,
+              label: '${_settings.maxTags}',
+              onChanged: (value) {
+                _updateSettings(
+                  _settings.copyWith(maxTags: value.toInt()),
+                );
+              },
+            ),
+
+            const Divider(height: 24),
+
+            // Heuristic fallback toggle
+            SwitchListTile(
+              value: _settings.useHeuristicFallback,
+              onChanged: (value) {
+                _updateSettings(
+                  _settings.copyWith(useHeuristicFallback: value),
+                );
+              },
+              title: Text(
+                'Use Heuristic Fallback',
+                style: textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              subtitle: Text(
+                'Use rule-based tagging when ML confidence is low',
+                style: textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurface.withOpacity(0.6),
+                ),
+              ),
+              contentPadding: EdgeInsets.zero,
+            ),
+          ],
+        ),
       ),
     );
   }
