@@ -8,6 +8,8 @@ import '../widgets/container_card.dart';
 import 'container_detail_screen.dart';
 import 'container_create_screen.dart';
 import 'profile_screen.dart';
+import '../widgets/animated_widgets.dart';
+import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 
 /// Container List Screen
 ///
@@ -248,34 +250,47 @@ class _ContainerListScreenState extends State<ContainerListScreen>
                       ),
                     )
                   : _isGridView
-                  ? GridView.builder(
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            crossAxisSpacing: 16,
-                            mainAxisSpacing: 16,
-                            childAspectRatio: 0.75,
-                          ),
-                      padding: const EdgeInsets.all(16),
-                      itemCount: _filteredContainers.length,
-                      itemBuilder: (context, index) {
-                        final container = _filteredContainers[index];
-                        final itemCount = CacheService.getItemCount(
-                          container.id,
-                        );
-                        final childContainerCount =
-                            CacheService.getChildContainerCount(container.id);
-                        return RepaintBoundary(
-                          child: ContainerCard(
-                            container: container,
-                            itemCount: itemCount,
-                            childContainerCount: childContainerCount,
-                            onTap: () => _navigateToDetail(container),
-                          ),
-                        );
-                      },
+                  : AnimationLimiter(
+                      child: GridView.builder(
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 2,
+                              crossAxisSpacing: 16,
+                              mainAxisSpacing: 16,
+                              childAspectRatio: 0.75,
+                            ),
+                        padding: const EdgeInsets.all(16),
+                        itemCount: _filteredContainers.length,
+                        itemBuilder: (context, index) {
+                          final container = _filteredContainers[index];
+                          final itemCount = CacheService.getItemCount(
+                            container.id,
+                          );
+                          final childContainerCount =
+                              CacheService.getChildContainerCount(container.id);
+                          return AnimationConfiguration.staggeredGrid(
+                            position: index,
+                            duration: const Duration(milliseconds: 375),
+                            columnCount: 2,
+                            child: ScaleAnimation(
+                              child: FadeInAnimation(
+                                child: ScaleOnTap(
+                                  onTap: () => _navigateToDetail(container),
+                                  child: ContainerCard(
+                                    container: container,
+                                    itemCount: itemCount,
+                                    childContainerCount: childContainerCount,
+                                    onTap: () {}, // Handled by ScaleOnTap
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
                     )
-                  : ListView.builder(
+                  : AnimationLimiter(
+                    child: ListView.builder(
                       padding: const EdgeInsets.all(16),
                       itemCount: _filteredContainers.length,
                       itemBuilder: (context, index) {
@@ -285,19 +300,30 @@ class _ContainerListScreenState extends State<ContainerListScreen>
                         );
                         final childContainerCount =
                             CacheService.getChildContainerCount(container.id);
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 16),
-                          child: RepaintBoundary(
-                            child: ContainerCard(
-                              container: container,
-                              itemCount: itemCount,
-                              childContainerCount: childContainerCount,
-                              onTap: () => _navigateToDetail(container),
+                        return AnimationConfiguration.staggeredList(
+                          position: index,
+                          duration: const Duration(milliseconds: 375),
+                          child: SlideAnimation(
+                            verticalOffset: 50.0,
+                            child: FadeInAnimation(
+                              child: Padding(
+                                padding: const EdgeInsets.only(bottom: 16),
+                                child: ScaleOnTap(
+                                  onTap: () => _navigateToDetail(container),
+                                  child: ContainerCard(
+                                    container: container,
+                                    itemCount: itemCount,
+                                    childContainerCount: childContainerCount,
+                                    onTap: () {}, // Handled by ScaleOnTap
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
                         );
                       },
                     ),
+                  ),
             ),
           ),
         ],

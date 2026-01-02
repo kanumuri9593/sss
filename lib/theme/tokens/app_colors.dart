@@ -42,6 +42,16 @@ class AppColors {
   static const Color darkSurface = Color(0xFF1E293B);         // Dark blue-gray
   static const Color darkOnSurface = Color(0xFFF9FAFB);       // Off-white
 
+  // ========== MODERN THEME BASE COLORS (NEW) ==========
+
+  static const Color modernPrimary = Color(0xFF6366F1);       // Indigo
+  static const Color modernSecondary = Color(0xFFEC4899);     // Pink
+  static const Color modernAccent = Color(0xFF8B5CF6);        // Violet
+
+  static const Color modernBackground = Color(0xFF0F172A);    // Slate 900
+  static const Color modernSurface = Color(0xFF1E293B);       // Slate 800
+  static const Color modernOnSurface = Color(0xFFF8FAFC);     // Slate 50
+
   // ========== RETRO THEME BASE COLORS ==========
 
   static const Color retroPrimary = Color(0xFFDC2626);        // Red

@@ -211,7 +211,7 @@ class _MyAppState extends State<MyApp> {
   @override
   Widget build(BuildContext context) {
     // Get current theme settings
-    final themeMode = _settings?.themeMode ?? AppThemeMode.system;
+    final themeMode = _settings?.themeMode ?? AppThemeMode.modern;
     final fontScale = _settings?.fontScale.scale ?? 1.0;
     final useDynamicType = _settings?.useDynamicType ?? true;
 
@@ -308,6 +308,7 @@ class _MyAppState extends State<MyApp> {
       case AppThemeMode.oceanBlue:
       case AppThemeMode.forestGreen:
       case AppThemeMode.sunsetOrange:
+      case AppThemeMode.modern:
         return ThemeMode.light;
       case AppThemeMode.dark:
         return ThemeMode.dark;

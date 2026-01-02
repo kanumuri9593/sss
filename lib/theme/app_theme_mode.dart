@@ -13,6 +13,7 @@ enum AppThemeMode {
   oceanBlue,
   forestGreen,
   sunsetOrange,
+  modern,
 }
 
 /// Extension methods for AppThemeMode
@@ -36,6 +37,8 @@ extension AppThemeModeExtension on AppThemeMode {
         return 'Forest Green';
       case AppThemeMode.sunsetOrange:
         return 'Sunset Orange';
+      case AppThemeMode.modern:
+        return 'Modern';
     }
   }
 
@@ -58,6 +61,8 @@ extension AppThemeModeExtension on AppThemeMode {
         return 'Fresh forest greens';
       case AppThemeMode.sunsetOrange:
         return 'Warm sunset oranges';
+      case AppThemeMode.modern:
+        return 'Vibrant indigo/pink modern theme';
     }
   }
 
@@ -80,6 +85,8 @@ extension AppThemeModeExtension on AppThemeMode {
         return Icons.forest;
       case AppThemeMode.sunsetOrange:
         return Icons.wb_sunny;
+      case AppThemeMode.modern:
+        return Icons.rocket_launch;
     }
   }
 
