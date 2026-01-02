@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 // import 'package:uni_links/uni_links.dart';
 import 'theme/app_theme.dart';
@@ -8,12 +9,17 @@ import 'screens/container_list_screen.dart';
 import 'screens/qr_detail_screen.dart';
 import 'screens/nfc_detail_screen.dart';
 import 'screens/container_detail_screen.dart';
+import 'screens/search_screen.dart';
+import 'screens/qr_scanner_screen.dart';
 import 'services/qr_service.dart';
 import 'services/nfc_service.dart';
 import 'services/storage_service.dart';
 import 'services/container_service.dart';
 import 'services/image_recognition_service.dart';
 import 'services/preferences_service.dart';
+import 'services/widget_service.dart';
+import 'services/siri_spotlight_service.dart';
+import 'services/google_assistant_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -29,6 +35,18 @@ Future<void> main() async {
   // Initialize image recognition
   await ImageRecognitionService.initialize();
 
+  // Initialize widget service for home screen widgets
+  await WidgetService.initialize();
+
+  // Initialize platform-specific integrations
+  if (Platform.isIOS) {
+    // Initialize Siri and Spotlight for iOS
+    await SiriSpotlightService.initialize();
+  } else if (Platform.isAndroid) {
+    // Initialize Google Assistant integration for Android
+    await GoogleAssistantService.initialize();
+  }
+
   runApp(const MyApp());
 }
 
@@ -39,15 +57,19 @@ class MyApp extends StatefulWidget {
   State<MyApp> createState() => _MyAppState();
 }
 
-class _MyAppState extends State<MyApp> {
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   // StreamSubscription? _linkSubscription;
   AppSettings? _settings;
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // _initDeepLinks();
     _initSettings();
+    _initWidgetClickHandler();
+    _checkInitialWidgetLaunch();
   }
 
   void _initSettings() {
@@ -65,6 +87,54 @@ class _MyAppState extends State<MyApp> {
       setState(() {
         _settings = PreferencesService.settingsNotifier.value;
       });
+    }
+  }
+
+  /// Initialize widget click handler for home screen widget interactions
+  void _initWidgetClickHandler() {
+    WidgetService.registerClickHandler((uri) {
+      if (uri != null) {
+        _handleDeepLink(uri.toString());
+      }
+    });
+  }
+
+  /// Check if app was launched from a home screen widget
+  Future<void> _checkInitialWidgetLaunch() async {
+    final uri = await WidgetService.getInitialUri();
+    if (uri != null) {
+      // Small delay to ensure app is fully initialized
+      await Future.delayed(const Duration(milliseconds: 500));
+      _handleDeepLink(uri.toString());
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    
+    // Update widgets when app goes to background or resumes
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.resumed) {
+      _updateNativeIntegrations();
+    }
+  }
+
+  /// Update all native integrations (widgets, Spotlight, shortcuts)
+  Future<void> _updateNativeIntegrations() async {
+    try {
+      // Update home screen widgets
+      await WidgetService.updateAllWidgets();
+
+      // Update platform-specific integrations
+      if (Platform.isIOS) {
+        await SiriSpotlightService.indexAllContent();
+      } else if (Platform.isAndroid) {
+        await GoogleAssistantService.updateAppActions();
+      }
+
+      debugPrint('[main] Native integrations updated');
+    } catch (e) {
+      debugPrint('[main] Error updating native integrations: $e');
     }
   }
 
@@ -98,6 +168,8 @@ class _MyAppState extends State<MyApp> {
     if (uri.scheme == 'sss') {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
+          final navigator = _navigatorKey.currentState ?? Navigator.of(context);
+          
           if (uri.host == 'container') {
             // Handle container deep link: sss://container/<id>
             final containerId = uri.pathSegments.isNotEmpty
@@ -106,7 +178,11 @@ class _MyAppState extends State<MyApp> {
             if (containerId.isNotEmpty) {
               final container = ContainerService.getContainer(containerId);
               if (container != null) {
-                Navigator.of(context).pushReplacement(
+                // Donate to Siri for predictions
+                if (Platform.isIOS) {
+                  SiriSpotlightService.donateContainerView(container);
+                }
+                navigator.push(
                   MaterialPageRoute(
                     builder: (context) =>
                         ContainerDetailScreen(containerId: containerId),
@@ -124,7 +200,7 @@ class _MyAppState extends State<MyApp> {
               // Check if it's linked to a container
               final container = ContainerService.getContainerByQRCode(id);
               if (container != null) {
-                Navigator.of(context).pushReplacement(
+                navigator.push(
                   MaterialPageRoute(
                     builder: (context) =>
                         ContainerDetailScreen(containerId: container.id),
@@ -136,7 +212,7 @@ class _MyAppState extends State<MyApp> {
               // Check if it's a QR code or NFC tag
               final qrData = QRService.getQRDataById(id);
               if (qrData != null) {
-                Navigator.of(context).pushReplacement(
+                navigator.push(
                   MaterialPageRoute(
                     builder: (context) => QRDetailScreen(qrId: id),
                   ),
@@ -150,7 +226,7 @@ class _MyAppState extends State<MyApp> {
                 // Check if NFC is linked to a container
                 final nfcContainer = ContainerService.getContainerByNFCTag(id);
                 if (nfcContainer != null) {
-                  Navigator.of(context).pushReplacement(
+                  navigator.push(
                     MaterialPageRoute(
                       builder: (context) =>
                           ContainerDetailScreen(containerId: nfcContainer.id),
@@ -159,7 +235,7 @@ class _MyAppState extends State<MyApp> {
                   return;
                 }
 
-                Navigator.of(context).pushReplacement(
+                navigator.push(
                   MaterialPageRoute(
                     builder: (context) => NFCDetailScreen(nfcId: id),
                   ),
@@ -167,10 +243,36 @@ class _MyAppState extends State<MyApp> {
                 return;
               }
             }
+          } else if (uri.host == 'search') {
+            // Handle search deep link: sss://search or sss://search?q=<query>
+            final query = uri.queryParameters['q'] ?? uri.queryParameters['query'];
+            navigator.push(
+              MaterialPageRoute(
+                builder: (context) => SearchScreen(initialQuery: query),
+              ),
+            );
+            return;
+          } else if (uri.host == 'scan') {
+            // Handle scan deep links: sss://scan/qr or sss://scan/nfc
+            navigator.push(
+              MaterialPageRoute(
+                builder: (context) => const QRScannerScreen(),
+              ),
+            );
+            return;
+          } else if (uri.host == 'containers' || uri.host == 'stats') {
+            // Just show the main screen
+            navigator.pushAndRemoveUntil(
+              MaterialPageRoute(
+                builder: (context) => const ContainerListScreen(),
+              ),
+              (route) => false,
+            );
+            return;
           }
 
           // Not found, show error
-          Navigator.of(context).pushReplacement(
+          navigator.push(
             MaterialPageRoute(
               builder: (context) => Scaffold(
                 appBar: AppBar(title: const Text('Not Found')),
@@ -203,6 +305,7 @@ class _MyAppState extends State<MyApp> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     // _linkSubscription?.cancel();
     PreferencesService.settingsNotifier.removeListener(_onSettingsChanged);
     super.dispose();
@@ -230,6 +333,7 @@ class _MyAppState extends State<MyApp> {
     return MediaQuery(
       data: MediaQuery.of(context).copyWith(textScaler: textScaler),
       child: MaterialApp(
+        navigatorKey: _navigatorKey,
         title: 'SSS - Search & Scan',
         theme: theme,
         darkTheme: AppTheme.buildTheme(
@@ -291,6 +395,16 @@ class _MyAppState extends State<MyApp> {
                   }
                 }
               }
+            } else if (uri.host == 'search') {
+              return MaterialPageRoute(
+                builder: (context) => SearchScreen(
+                  initialQuery: uri.queryParameters['q'],
+                ),
+              );
+            } else if (uri.host == 'scan') {
+              return MaterialPageRoute(
+                builder: (context) => const QRScannerScreen(),
+              );
             }
           }
           return null;

@@ -68,5 +68,15 @@
 		<string>UIInterfaceOrientationPortrait</string>
 		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 	</array>
+	<key>NSSiriUsageDescription</key>
+	<string>SSS uses Siri to help you quickly search and access your containers using voice commands.</string>
+	<key>NSUserActivityTypes</key>
+	<array>
+		<string>com.example.sss.searchContainers</string>
+		<string>com.example.sss.viewContainer</string>
+		<string>com.example.sss.addItem</string>
+		<string>com.example.sss.scanQR</string>
+		<string>com.example.sss.scanNFC</string>
+	</array>
 </dict>
 </plist>

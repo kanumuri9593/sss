@@ -113,4 +113,90 @@ class AppColors {
   /// Creates a white overlay
   static Color whiteOverlay({double opacity = 0.5}) =>
       Colors.white.withValues(alpha: opacity);
+
+  // ========== GLASSMORPHISM COLORS ==========
+  // Optimized for frosted glass effects
+
+  /// Glass surface for light theme (frosted white)
+  static const Color glassLight = Color(0xFFFFFFFF);
+  
+  /// Glass surface for dark theme (frosted dark)
+  static const Color glassDark = Color(0xFF1E293B);
+
+  /// Glass border color for light theme
+  static Color get glassBorderLight => Colors.white.withValues(alpha: 0.25);
+  
+  /// Glass border color for dark theme
+  static Color get glassBorderDark => Colors.white.withValues(alpha: 0.15);
+
+  /// Soft shadow colors (colored, not pure black)
+  static Color primaryShadow(Color primary) => primary.withValues(alpha: 0.25);
+  static Color secondaryShadow(Color secondary) => secondary.withValues(alpha: 0.2);
+
+  /// Glow colors for interactive elements
+  static Color glowPrimary(Color primary) => primary.withValues(alpha: 0.4);
+  static Color glowSecondary(Color secondary) => secondary.withValues(alpha: 0.35);
+
+  /// Shimmer/highlight colors
+  static const Color shimmerHighlight = Color(0x40FFFFFF);
+  static const Color shimmerBase = Color(0x10FFFFFF);
+
+  // ========== VIBRANT ACCENT GRADIENTS ==========
+  // For CTAs and highlights
+
+  static const Color vibrantPink = Color(0xFFFF6B9D);
+  static const Color vibrantPurple = Color(0xFF9F7AEA);
+  static const Color vibrantBlue = Color(0xFF4299E1);
+  static const Color vibrantCyan = Color(0xFF0BC5EA);
+  static const Color vibrantGreen = Color(0xFF48BB78);
+  static const Color vibrantYellow = Color(0xFFECC94B);
+  static const Color vibrantOrange = Color(0xFFED8936);
+  static const Color vibrantRed = Color(0xFFF56565);
+
+  // ========== CELEBRATION COLORS ==========
+  // For success states and celebrations
+
+  static const List<Color> confettiColors = [
+    Color(0xFFFF6B9D), // Pink
+    Color(0xFF9F7AEA), // Purple
+    Color(0xFF4299E1), // Blue
+    Color(0xFF48BB78), // Green
+    Color(0xFFECC94B), // Yellow
+    Color(0xFFED8936), // Orange
+  ];
+
+  static const Color celebrationGold = Color(0xFFFFD700);
+  static const Color celebrationSparkle = Color(0xFFFFF9C4);
+
+  // ========== SEMANTIC GLASS SURFACES ==========
+
+  /// Glass card background with primary tint
+  static Color glassCardPrimary(Color primary, {bool isDark = false}) {
+    return primary.withValues(alpha: isDark ? 0.15 : 0.08);
+  }
+
+  /// Glass card background with secondary tint
+  static Color glassCardSecondary(Color secondary, {bool isDark = false}) {
+    return secondary.withValues(alpha: isDark ? 0.12 : 0.06);
+  }
+
+  /// Frosted surface color
+  static Color frostedSurface({bool isDark = false}) {
+    return isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : Colors.white.withValues(alpha: 0.7);
+  }
+
+  /// Glass gradient colors for cards
+  static List<Color> glassGradient({bool isDark = false}) {
+    return isDark
+        ? [
+            Colors.white.withValues(alpha: 0.12),
+            Colors.white.withValues(alpha: 0.05),
+          ]
+        : [
+            Colors.white.withValues(alpha: 0.6),
+            Colors.white.withValues(alpha: 0.3),
+          ];
+  }
 }

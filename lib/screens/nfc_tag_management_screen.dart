@@ -733,7 +733,7 @@ class _NFCTagRegisterDialogState extends State<_NFCTagRegisterDialog> {
   final _descriptionController = TextEditingController();
   final _tagInputController = TextEditingController();
 
-  List<String> _tags = [];
+  final List<String> _tags = [];
   bool _isWriting = false;
   bool _linkToContainer = true;
   String? _errorMessage;

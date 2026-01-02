@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SSS</string>
+    
+    <!-- Widget descriptions -->
+    <string name="widget_quick_search_description">Quick access to SSS search and scan features</string>
+    <string name="widget_recent_containers_description">View your recent containers</string>
+    <string name="widget_stats_description">Overview of your storage inventory</string>
+    
+    <!-- Shortcut labels -->
+    <string name="shortcut_search_short">Search</string>
+    <string name="shortcut_search_long">Search containers and items</string>
+    <string name="shortcut_scan_qr_short">Scan QR</string>
+    <string name="shortcut_scan_qr_long">Scan QR code to find container</string>
+    <string name="shortcut_scan_nfc_short">Scan NFC</string>
+    <string name="shortcut_scan_nfc_long">Scan NFC tag to find container</string>
+    
+    <!-- Assistant responses -->
+    <string name="assistant_search_prompt">What would you like to search for?</string>
+    <string name="assistant_no_results">No containers or items found</string>
+</resources>

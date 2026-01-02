@@ -17,7 +17,10 @@ import 'container_detail_screen.dart';
 /// 
 /// Unified search interface for searching items and containers by text, tags, or image.
 class SearchScreen extends StatefulWidget {
-  const SearchScreen({super.key});
+  /// Optional initial search query (e.g., from deep link or widget)
+  final String? initialQuery;
+  
+  const SearchScreen({super.key, this.initialQuery});
 
   @override
   State<SearchScreen> createState() => _SearchScreenState();
@@ -37,6 +40,16 @@ class _SearchScreenState extends State<SearchScreen> {
     super.initState();
     _searchController.addListener(_onSearchChanged);
     _loadAvailableTags();
+    
+    // Handle initial query from deep link or widget
+    if (widget.initialQuery != null && widget.initialQuery!.isNotEmpty) {
+      _searchController.text = widget.initialQuery!;
+      _searchQuery = widget.initialQuery!;
+      // Trigger search after widget builds
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _performSearch();
+      });
+    }
   }
 
   @override

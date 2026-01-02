@@ -1,19 +1,30 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../models/container.dart' as models;
 import '../services/container_service.dart';
 import '../services/storage_service.dart';
 import '../services/cache_service.dart';
+import '../services/item_service.dart';
 import '../widgets/container_card.dart';
+import '../widgets/glass_components.dart';
+import '../widgets/spring_animations.dart';
+import '../widgets/illustrations.dart';
+import '../widgets/celebrations.dart';
+import '../navigation/custom_transitions.dart';
 import 'container_detail_screen.dart';
 import 'container_create_screen.dart';
 import 'profile_screen.dart';
-import '../widgets/animated_widgets.dart';
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 
-/// Container List Screen
+/// Container List Screen - Award-Winning UI Redesign
 ///
-/// Displays all containers in a grid/list view with search functionality.
+/// Features:
+/// - Time-based greeting with stats in glass pills
+/// - Animated search bar with spring physics
+/// - Staggered masonry grid with parallax effect
+/// - Glassmorphism container cards
+/// - Custom FAB with celebration animations
 class ContainerListScreen extends StatefulWidget {
   const ContainerListScreen({super.key});
 
@@ -22,21 +33,33 @@ class ContainerListScreen extends StatefulWidget {
 }
 
 class _ContainerListScreenState extends State<ContainerListScreen>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, TickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
   List<models.Container> _containers = [];
   List<models.Container> _filteredContainers = [];
   bool _isGridView = true;
   Timer? _searchDebounceTimer;
+  final bool _isSearchExpanded = false;
+  bool _showCelebration = false;
+  late AnimationController _fabController;
+  late Animation<double> _fabRotation;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _searchController.addListener(_onSearchChanged);
-    // Initialize cache for performance
+
+    _fabController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    _fabRotation = Tween<double>(begin: 0, end: 0.125).animate(
+      CurvedAnimation(parent: _fabController, curve: Curves.easeOutCubic),
+    );
+
     CacheService.initialize();
-    // Load containers after a short delay to ensure storage is initialized
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadContainers();
     });
@@ -45,8 +68,6 @@ class _ContainerListScreenState extends State<ContainerListScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Reload data when dependencies change (e.g., when tab becomes visible)
-    // This ensures data is fresh when navigating back to this tab
     if (StorageService.isInitialized && _containers.isEmpty) {
       _loadContainers();
     }
@@ -57,24 +78,44 @@ class _ContainerListScreenState extends State<ContainerListScreen>
     WidgetsBinding.instance.removeObserver(this);
     _searchDebounceTimer?.cancel();
     _searchController.dispose();
+    _scrollController.dispose();
+    _fabController.dispose();
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Reload data when app comes back to foreground
     if (state == AppLifecycleState.resumed) {
       _loadContainers();
     }
   }
 
+  String _getGreeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) {
+      return 'Good morning';
+    } else if (hour < 17) {
+      return 'Good afternoon';
+    } else {
+      return 'Good evening';
+    }
+  }
+
+  String _getGreetingEmoji() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) {
+      return '🌅';
+    } else if (hour < 17) {
+      return '☀️';
+    } else {
+      return '🌙';
+    }
+  }
+
   Future<void> _loadContainers() async {
     try {
-      // Ensure storage is initialized
       if (!StorageService.isInitialized) {
-        debugPrint(
-          '[ContainerListScreen] Storage not initialized, skipping load',
-        );
+        debugPrint('[ContainerListScreen] Storage not initialized');
         return;
       }
 
@@ -83,7 +124,6 @@ class _ContainerListScreenState extends State<ContainerListScreen>
         '[ContainerListScreen] Loaded ${containers.length} containers',
       );
 
-      // Reapply search filter if active
       List<models.Container> filtered;
       if (_searchController.text.isEmpty) {
         filtered = containers;
@@ -105,7 +145,7 @@ class _ContainerListScreenState extends State<ContainerListScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error loading containers: $e'),
-            backgroundColor: Colors.red,
+            backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
       }
@@ -113,19 +153,18 @@ class _ContainerListScreenState extends State<ContainerListScreen>
   }
 
   void _onSearchChanged() {
-    // Debounce search to avoid excessive rebuilds
     _searchDebounceTimer?.cancel();
     _searchDebounceTimer = Timer(const Duration(milliseconds: 300), () async {
       if (!mounted) return;
       final query = _searchController.text;
-      
+
       List<models.Container> results;
       if (query.isEmpty) {
         results = _containers;
       } else {
         results = await ContainerService.searchContainers(query);
       }
-      
+
       if (mounted) {
         setState(() {
           _filteredContainers = results;
@@ -135,203 +174,382 @@ class _ContainerListScreenState extends State<ContainerListScreen>
   }
 
   Future<void> _refreshContainers() async {
-    _loadContainers();
+    HapticFeedback.mediumImpact();
+    await _loadContainers();
   }
 
   void _navigateToCreate() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (context) => const ContainerCreateScreen()),
-    );
-    // Always reload when returning from create screen
-    // to ensure we have the latest data
+    _fabController.forward();
+    HapticFeedback.lightImpact();
+
+    final result = await navigateScale(context, const ContainerCreateScreen());
+
+    _fabController.reverse();
+
+    if (result == true) {
+      // Show celebration for new container
+      setState(() => _showCelebration = true);
+      Future.delayed(const Duration(milliseconds: 1500), () {
+        if (mounted) {
+          setState(() => _showCelebration = false);
+        }
+      });
+    }
+
     _refreshContainers();
   }
 
   void _navigateToDetail(models.Container container) async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => ContainerDetailScreen(containerId: container.id),
-      ),
+    HapticFeedback.selectionClick();
+    await navigateSlide(
+      context,
+      ContainerDetailScreen(containerId: container.id),
     );
-    // Always reload when returning from detail screen
-    // to ensure we have the latest data (in case container was deleted/updated)
     _refreshContainers();
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final totalItems = ItemService.getAllItems().length;
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Containers'),
-        actions: [
-          IconButton(
-            icon: Icon(_isGridView ? Icons.list : Icons.grid_view),
-            onPressed: () {
-              setState(() {
-                _isGridView = !_isGridView;
-              });
-            },
-            tooltip: _isGridView ? 'List view' : 'Grid view',
+      extendBodyBehindAppBar: true,
+      appBar: _buildGlassAppBar(context),
+      body: ConfettiBurst(
+        trigger: _showCelebration,
+        child: RefreshIndicator(
+          onRefresh: _refreshContainers,
+          color: theme.colorScheme.primary,
+          child: CustomScrollView(
+            controller: _scrollController,
+            physics: const AlwaysScrollableScrollPhysics(
+              parent: BouncingScrollPhysics(),
+            ),
+            slivers: [
+              // Header with greeting and stats
+              SliverToBoxAdapter(child: _buildHeader(context, totalItems)),
+
+              // Search Bar
+              SliverToBoxAdapter(child: _buildSearchBar(context)),
+
+              // Content
+              if (_filteredContainers.isEmpty)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: _buildEmptyState(context),
+                )
+              else if (_isGridView)
+                _buildGrid(context)
+              else
+                _buildList(context),
+
+              // Bottom padding for FAB
+              const SliverToBoxAdapter(child: SizedBox(height: 100)),
+            ],
           ),
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const ProfileScreen()),
-              );
+        ),
+      ),
+      floatingActionButton: _buildFAB(context),
+    );
+  }
+
+  PreferredSizeWidget _buildGlassAppBar(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return GlassAppBar(
+      title: Text(
+        'My Containers',
+        style: theme.textTheme.titleLarge?.copyWith(
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      actions: [
+        IconButton(
+          icon: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            transitionBuilder: (child, animation) {
+              return ScaleTransition(scale: animation, child: child);
             },
-            tooltip: 'Settings',
+            child: Icon(
+              _isGridView ? Icons.view_list_rounded : Icons.grid_view_rounded,
+              key: ValueKey(_isGridView),
+            ),
+          ),
+          onPressed: () {
+            HapticFeedback.selectionClick();
+            setState(() => _isGridView = !_isGridView);
+          },
+          tooltip: _isGridView ? 'List view' : 'Grid view',
+        ),
+        SpringScale(
+          onTap: () {
+            navigateSlide(context, const ProfileScreen());
+          },
+          child: Container(
+            margin: const EdgeInsets.only(right: 8),
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primary.withValues(alpha: 0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.settings_rounded,
+              color: theme.colorScheme.primary,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHeader(BuildContext context, int totalItems) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Container(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        MediaQuery.of(context).padding.top + kToolbarHeight + 16,
+        20,
+        20,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Greeting
+          SpringSlide(
+            beginOffset: const Offset(0, 20),
+            child: Row(
+              children: [
+                Text(
+                  _getGreeting(),
+                  style: theme.textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(_getGreetingEmoji(), style: const TextStyle(fontSize: 28)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Stats Pills
+          SpringSlide(
+            beginOffset: const Offset(0, 20),
+            delay: const Duration(milliseconds: 100),
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              children: [
+                GlassPill(
+                  icon: Icons.inventory_2_rounded,
+                  text: '${_containers.length} containers',
+                  color: theme.colorScheme.primary,
+                ),
+                GlassPill(
+                  icon: Icons.category_rounded,
+                  text: '$totalItems items',
+                  color: theme.colorScheme.secondary,
+                ),
+              ],
+            ),
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // Search Bar
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: 'Search containers...',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _searchController.text.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () {
-                          _searchController.clear();
-                        },
-                      )
-                    : null,
+    );
+  }
+
+  Widget _buildSearchBar(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return SpringSlide(
+      beginOffset: const Offset(0, 20),
+      delay: const Duration(milliseconds: 200),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: GlassCard(
+          blur: 15,
+          opacity: isDark ? 0.15 : 0.6,
+          borderRadius: BorderRadius.circular(16),
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: TextField(
+            controller: _searchController,
+            decoration: InputDecoration(
+              hintText: 'Search containers...',
+              prefixIcon: Icon(
+                Icons.search_rounded,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+              ),
+              suffixIcon: _searchController.text.isNotEmpty
+                  ? IconButton(
+                      icon: Icon(
+                        Icons.clear_rounded,
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.5,
+                        ),
+                      ),
+                      onPressed: () {
+                        _searchController.clear();
+                        HapticFeedback.selectionClick();
+                      },
+                    )
+                  : null,
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 14,
               ),
             ),
           ),
-          // Container List/Grid
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: _refreshContainers,
-              child: _filteredContainers.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.inventory_2_outlined,
-                            size: 64,
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onSurfaceVariant,
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            _searchController.text.isEmpty
-                                ? 'No containers yet'
-                                : 'No containers found',
-                            style: Theme.of(context).textTheme.titleMedium
-                                ?.copyWith(
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onSurfaceVariant,
-                                ),
-                          ),
-                          if (_searchController.text.isEmpty) ...[
-                            const SizedBox(height: 8),
-                            Text(
-                              'Tap + to create your first container',
-                              style: Theme.of(context).textTheme.bodyMedium
-                                  ?.copyWith(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.onSurfaceVariant,
-                                  ),
-                            ),
-                          ],
-                        ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(BuildContext context) {
+    return SpringSlide(
+      beginOffset: const Offset(0, 30),
+      delay: const Duration(milliseconds: 300),
+      child: EmptyStateWidget(
+        illustration: _searchController.text.isNotEmpty
+            ? const SearchNoResultsIllustration()
+            : const NoContainersIllustration(),
+        title: _searchController.text.isEmpty
+            ? 'No containers yet'
+            : 'No containers found',
+        subtitle: _searchController.text.isEmpty
+            ? 'Tap the + button to create your first container'
+            : 'Try adjusting your search',
+        action: _searchController.text.isEmpty
+            ? GlassButton(
+                onPressed: _navigateToCreate,
+                glowColor: Theme.of(context).colorScheme.primary,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.add_rounded,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Create Container',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.primary,
+                        fontWeight: FontWeight.w600,
                       ),
-                    )
-                  : _isGridView
-                  : AnimationLimiter(
-                      child: GridView.builder(
-                        gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 2,
-                              crossAxisSpacing: 16,
-                              mainAxisSpacing: 16,
-                              childAspectRatio: 0.75,
-                            ),
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _filteredContainers.length,
-                        itemBuilder: (context, index) {
-                          final container = _filteredContainers[index];
-                          final itemCount = CacheService.getItemCount(
-                            container.id,
-                          );
-                          final childContainerCount =
-                              CacheService.getChildContainerCount(container.id);
-                          return AnimationConfiguration.staggeredGrid(
-                            position: index,
-                            duration: const Duration(milliseconds: 375),
-                            columnCount: 2,
-                            child: ScaleAnimation(
-                              child: FadeInAnimation(
-                                child: ScaleOnTap(
-                                  onTap: () => _navigateToDetail(container),
-                                  child: ContainerCard(
-                                    container: container,
-                                    itemCount: itemCount,
-                                    childContainerCount: childContainerCount,
-                                    onTap: () {}, // Handled by ScaleOnTap
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        },
+                    ),
+                  ],
+                ),
+              )
+            : null,
+      ),
+    );
+  }
+
+  Widget _buildGrid(BuildContext context) {
+    return SliverPadding(
+      padding: const EdgeInsets.all(20),
+      sliver: AnimationLimiter(
+        child: SliverGrid(
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 16,
+            mainAxisSpacing: 16,
+            childAspectRatio: 0.72,
+          ),
+          delegate: SliverChildBuilderDelegate((context, index) {
+            final container = _filteredContainers[index];
+            final itemCount = CacheService.getItemCount(container.id);
+            final childContainerCount = CacheService.getChildContainerCount(
+              container.id,
+            );
+
+            return AnimationConfiguration.staggeredGrid(
+              position: index,
+              duration: const Duration(milliseconds: 400),
+              columnCount: 2,
+              child: ScaleAnimation(
+                scale: 0.9,
+                child: FadeInAnimation(
+                  child: ContainerCard(
+                    container: container,
+                    itemCount: itemCount,
+                    childContainerCount: childContainerCount,
+                    onTap: () => _navigateToDetail(container),
+                  ),
+                ),
+              ),
+            );
+          }, childCount: _filteredContainers.length),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildList(BuildContext context) {
+    return SliverPadding(
+      padding: const EdgeInsets.all(20),
+      sliver: AnimationLimiter(
+        child: SliverList(
+          delegate: SliverChildBuilderDelegate((context, index) {
+            final container = _filteredContainers[index];
+            final itemCount = CacheService.getItemCount(container.id);
+            final childContainerCount = CacheService.getChildContainerCount(
+              container.id,
+            );
+
+            return AnimationConfiguration.staggeredList(
+              position: index,
+              duration: const Duration(milliseconds: 400),
+              child: SlideAnimation(
+                verticalOffset: 50.0,
+                child: FadeInAnimation(
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: SizedBox(
+                      height: 200,
+                      child: ContainerCard(
+                        container: container,
+                        itemCount: itemCount,
+                        childContainerCount: childContainerCount,
+                        onTap: () => _navigateToDetail(container),
                       ),
-                    )
-                  : AnimationLimiter(
-                    child: ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: _filteredContainers.length,
-                      itemBuilder: (context, index) {
-                        final container = _filteredContainers[index];
-                        final itemCount = CacheService.getItemCount(
-                          container.id,
-                        );
-                        final childContainerCount =
-                            CacheService.getChildContainerCount(container.id);
-                        return AnimationConfiguration.staggeredList(
-                          position: index,
-                          duration: const Duration(milliseconds: 375),
-                          child: SlideAnimation(
-                            verticalOffset: 50.0,
-                            child: FadeInAnimation(
-                              child: Padding(
-                                padding: const EdgeInsets.only(bottom: 16),
-                                child: ScaleOnTap(
-                                  onTap: () => _navigateToDetail(container),
-                                  child: ContainerCard(
-                                    container: container,
-                                    itemCount: itemCount,
-                                    childContainerCount: childContainerCount,
-                                    onTap: () {}, // Handled by ScaleOnTap
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        );
-                      },
                     ),
                   ),
-            ),
-          ),
-        ],
+                ),
+              ),
+            );
+          }, childCount: _filteredContainers.length),
+        ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _navigateToCreate,
-        tooltip: 'Create container',
-        child: const Icon(Icons.add),
+    );
+  }
+
+  Widget _buildFAB(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return GlassFAB(
+      onPressed: _navigateToCreate,
+      backgroundColor: theme.colorScheme.primary,
+      child: AnimatedBuilder(
+        animation: _fabRotation,
+        builder: (context, child) {
+          return Transform.rotate(
+            angle: _fabRotation.value * 3.14159 * 2,
+            child: Icon(
+              Icons.add_rounded,
+              color: theme.colorScheme.onPrimary,
+              size: 28,
+            ),
+          );
+        },
       ),
     );
   }

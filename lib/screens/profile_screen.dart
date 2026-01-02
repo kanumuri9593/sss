@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../models/app_settings.dart';
 import '../services/preferences_service.dart';
@@ -7,15 +8,17 @@ import '../services/container_service.dart';
 import '../services/item_service.dart';
 import '../theme/app_theme_mode.dart';
 import '../theme/tokens/app_spacing.dart';
+import '../widgets/glass_components.dart';
+import '../widgets/spring_animations.dart';
+import '../widgets/animated_widgets.dart';
 
-/// Profile Screen
+/// Profile Screen - Award-Winning UI Redesign
 ///
-/// Comprehensive settings page for user preferences including:
-/// - Appearance (theme, font)
-/// - Image Recognition settings
-/// - Storage & Data management
-/// - System permissions
-/// - About section
+/// Comprehensive settings page with glass morphism design:
+/// - Glass header card with app stats
+/// - Animated theme previews
+/// - Settings in expandable glass sections
+/// - Fun illustrations for each section
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
@@ -38,14 +41,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _loadData() async {
-    // Load storage path
     final storagePath = await PreferencesService.getStoragePath();
-
-    // Load cache size
     final cacheBytes = await PreferencesService.getImageCacheSizeBytes();
     final cacheSizeDisplay = PreferencesService.formatBytes(cacheBytes);
-
-    // Check permissions
     final cameraStatus = await Permission.camera.status;
     final storageStatus = await Permission.storage.status;
 
@@ -63,6 +61,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _updateSettings(AppSettings newSettings) async {
+    HapticFeedback.selectionClick();
     setState(() {
       _settings = newSettings;
     });
@@ -71,103 +70,230 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
+      extendBodyBehindAppBar: true,
+      appBar: GlassAppBar(
+        title: Text(
+          'Settings',
+          style: theme.textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: AppSpacing.paddingMD,
-              children: [
-                // Profile Header
-                _buildProfileHeader(colorScheme),
-                AppSpacing.verticalGapLG,
-
-                // Appearance Section
-                _buildSectionCard(
-                  context,
-                  title: 'Appearance',
-                  icon: Icons.palette_outlined,
-                  children: [
-                    _buildThemeSelector(colorScheme),
-                    const Divider(height: 1),
-                    _buildFontScaleSelector(colorScheme),
-                    const Divider(height: 1),
-                    _buildDynamicTypeToggle(),
-                  ],
-                ),
-                AppSpacing.verticalGapMD,
-
-                // Image Recognition Section
-                _buildSectionCard(
-                  context,
-                  title: 'Image Recognition',
-                  icon: Icons.image_search_outlined,
-                  children: [
-                    _buildProviderSelector(colorScheme),
-                    const Divider(height: 1),
-                    _buildConfidenceSlider(),
-                    const Divider(height: 1),
-                    _buildHeuristicFallbackToggle(),
-                  ],
-                ),
-                AppSpacing.verticalGapMD,
-
-                // Storage & Data Section
-                _buildSectionCard(
-                  context,
-                  title: 'Storage & Data',
-                  icon: Icons.storage_outlined,
-                  children: [
-                    _buildStorageLocation(),
-                    const Divider(height: 1),
-                    _buildImageCacheSettings(colorScheme),
-                    const Divider(height: 1),
-                    _buildClearCacheButton(colorScheme),
-                    const Divider(height: 1),
-                    _buildClearAllDataButton(colorScheme),
-                  ],
-                ),
-                AppSpacing.verticalGapMD,
-
-                // Permissions Section
-                _buildSectionCard(
-                  context,
-                  title: 'Permissions',
-                  icon: Icons.security_outlined,
-                  children: [
-                    _buildPermissionTile(
-                      Permission.camera,
-                      'Camera',
-                      'Required for QR scanning and photo capture',
-                      Icons.camera_alt_outlined,
+          : CustomScrollView(
+              physics: const BouncingScrollPhysics(),
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.only(
+                      top:
+                          MediaQuery.of(context).padding.top +
+                          kToolbarHeight +
+                          16,
                     ),
-                    const Divider(height: 1),
-                    _buildPermissionTile(
-                      Permission.storage,
-                      'Storage',
-                      'Required for saving and exporting data',
-                      Icons.folder_outlined,
-                    ),
-                  ],
-                ),
-                AppSpacing.verticalGapMD,
+                    child: Column(
+                      children: [
+                        // Profile Header with animation
+                        SpringSlide(
+                          beginOffset: const Offset(0, 30),
+                          child: _buildProfileHeader(colorScheme),
+                        ),
+                        AppSpacing.verticalGapLG,
 
-                // About Section
-                _buildSectionCard(
-                  context,
-                  title: 'About',
-                  icon: Icons.info_outline,
-                  children: [
-                    _buildAboutTile('Version', '1.0.0'),
-                    const Divider(height: 1),
-                    _buildResetButton(colorScheme),
-                  ],
+                        // Appearance Section
+                        SpringSlide(
+                          beginOffset: const Offset(0, 30),
+                          delay: const Duration(milliseconds: 100),
+                          child: _buildGlassSection(
+                            context,
+                            title: 'Appearance',
+                            icon: Icons.palette_rounded,
+                            emoji: '🎨',
+                            children: [
+                              _buildThemeSelector(colorScheme),
+                              _buildGlassDivider(),
+                              _buildFontScaleSelector(colorScheme),
+                              _buildGlassDivider(),
+                              _buildDynamicTypeToggle(),
+                            ],
+                          ),
+                        ),
+                        AppSpacing.verticalGapMD,
+
+                        // Image Recognition Section
+                        SpringSlide(
+                          beginOffset: const Offset(0, 30),
+                          delay: const Duration(milliseconds: 200),
+                          child: _buildGlassSection(
+                            context,
+                            title: 'Image Recognition',
+                            icon: Icons.image_search_rounded,
+                            emoji: '🔍',
+                            children: [
+                              _buildProviderSelector(colorScheme),
+                              _buildGlassDivider(),
+                              _buildConfidenceSlider(),
+                              _buildGlassDivider(),
+                              _buildHeuristicFallbackToggle(),
+                            ],
+                          ),
+                        ),
+                        AppSpacing.verticalGapMD,
+
+                        // Storage & Data Section
+                        SpringSlide(
+                          beginOffset: const Offset(0, 30),
+                          delay: const Duration(milliseconds: 300),
+                          child: _buildGlassSection(
+                            context,
+                            title: 'Storage & Data',
+                            icon: Icons.storage_rounded,
+                            emoji: '💾',
+                            children: [
+                              _buildStorageLocation(),
+                              _buildGlassDivider(),
+                              _buildImageCacheSettings(colorScheme),
+                              _buildGlassDivider(),
+                              _buildClearCacheButton(colorScheme),
+                              _buildGlassDivider(),
+                              _buildClearAllDataButton(colorScheme),
+                            ],
+                          ),
+                        ),
+                        AppSpacing.verticalGapMD,
+
+                        // Permissions Section
+                        SpringSlide(
+                          beginOffset: const Offset(0, 30),
+                          delay: const Duration(milliseconds: 400),
+                          child: _buildGlassSection(
+                            context,
+                            title: 'Permissions',
+                            icon: Icons.security_rounded,
+                            emoji: '🔐',
+                            children: [
+                              _buildPermissionTile(
+                                Permission.camera,
+                                'Camera',
+                                'Required for QR scanning and photo capture',
+                                Icons.camera_alt_rounded,
+                              ),
+                              _buildGlassDivider(),
+                              _buildPermissionTile(
+                                Permission.storage,
+                                'Storage',
+                                'Required for saving and exporting data',
+                                Icons.folder_rounded,
+                              ),
+                            ],
+                          ),
+                        ),
+                        AppSpacing.verticalGapMD,
+
+                        // About Section
+                        SpringSlide(
+                          beginOffset: const Offset(0, 30),
+                          delay: const Duration(milliseconds: 500),
+                          child: _buildGlassSection(
+                            context,
+                            title: 'About',
+                            icon: Icons.info_rounded,
+                            emoji: 'ℹ️',
+                            children: [
+                              _buildAboutTile('Version', '1.0.0'),
+                              _buildGlassDivider(),
+                              _buildResetButton(colorScheme),
+                            ],
+                          ),
+                        ),
+                        AppSpacing.verticalGapXL,
+                        AppSpacing.verticalGapXL,
+                      ],
+                    ),
+                  ),
                 ),
-                AppSpacing.verticalGapXL,
               ],
             ),
+    );
+  }
+
+  Widget _buildGlassDivider() {
+    return Container(
+      height: 1,
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.1),
+    );
+  }
+
+  // ========== Glass Section Card ==========
+
+  Widget _buildGlassSection(
+    BuildContext context, {
+    required String title,
+    required IconData icon,
+    required String emoji,
+    required List<Widget> children,
+  }) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
+    return GlassCard(
+      blur: 15,
+      opacity: isDark ? 0.12 : 0.6,
+      margin: AppSpacing.horizontalMD,
+      borderRadius: BorderRadius.circular(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  colorScheme.primary.withValues(alpha: 0.1),
+                  colorScheme.secondary.withValues(alpha: 0.05),
+                ],
+              ),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24),
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primary.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(icon, size: 22, color: colorScheme.primary),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                Text(emoji, style: const TextStyle(fontSize: 24)),
+              ],
+            ),
+          ),
+          // Children
+          ...children,
+          const SizedBox(height: 8),
+        ],
+      ),
     );
   }
 
@@ -181,59 +307,122 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ? ItemService.getAllItems().length
         : 0;
 
-    return Card(
-      child: Padding(
-        padding: AppSpacing.paddingLG,
-        child: Column(
-          children: [
-            // App Icon
-            Container(
-              width: 80,
-              height: 80,
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return GlassCard(
+      blur: 20,
+      opacity: isDark ? 0.15 : 0.7,
+      margin: AppSpacing.horizontalMD,
+      borderRadius: BorderRadius.circular(28),
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        children: [
+          // App Icon with glow
+          PulseGlow(
+            glowColor: colorScheme.primary,
+            glowRadius: 30,
+            enabled: true,
+            child: Container(
+              width: 90,
+              height: 90,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [colorScheme.primary, colorScheme.secondary],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: colorScheme.primary.withValues(alpha: 0.4),
+                    blurRadius: 20,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
               ),
               child: const Icon(
-                Icons.inventory_2,
-                size: 40,
+                Icons.inventory_2_rounded,
+                size: 44,
                 color: Colors.white,
               ),
             ),
-            AppSpacing.verticalGapMD,
+          ),
+          AppSpacing.verticalGapMD,
 
-            // App Name
-            Text(
-              'SSS - Search & Scan',
-              style: Theme.of(
-                context,
-              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+          // App Name
+          Text(
+            'SSS - Search & Scan',
+            style: theme.textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.bold,
             ),
-            AppSpacing.verticalGapXS,
+          ),
+          AppSpacing.verticalGapXS,
 
-            // Stats
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _buildStatChip(
-                  Icons.inventory_2_outlined,
-                  '$containerCount containers',
-                  colorScheme,
-                ),
-                AppSpacing.horizontalGapMD,
-                _buildStatChip(
-                  Icons.category_outlined,
-                  '$itemCount items',
-                  colorScheme,
-                ),
-              ],
+          Text(
+            'Organize your world',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: colorScheme.onSurface.withValues(alpha: 0.6),
             ),
-          ],
-        ),
+          ),
+          AppSpacing.verticalGapLG,
+
+          // Stats with animation
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _buildAnimatedStatPill(
+                Icons.inventory_2_rounded,
+                containerCount,
+                'containers',
+                colorScheme.primary,
+              ),
+              AppSpacing.horizontalGapMD,
+              _buildAnimatedStatPill(
+                Icons.category_rounded,
+                itemCount,
+                'items',
+                colorScheme.secondary,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAnimatedStatPill(
+    IconData icon,
+    int count,
+    String label,
+    Color color,
+  ) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.3), width: 1),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 8),
+          CountUp(
+            value: count,
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(color: color.withValues(alpha: 0.8), fontSize: 13),
+          ),
+        ],
       ),
     );
   }

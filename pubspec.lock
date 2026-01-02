@@ -294,6 +294,14 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
+  flutter_core_spotlight:
+    dependency: "direct main"
+    description:
+      name: flutter_core_spotlight
+      sha256: "89eaf74d17d40f71dbc3eec3032d8fd99b319a91bef86a5e0a83b93b1e5ecfa7"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.0.4"
   flutter_launcher_icons:
     dependency: "direct dev"
     description:
@@ -318,6 +326,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.0.33"
+  flutter_siri_suggestions:
+    dependency: "direct main"
+    description:
+      name: flutter_siri_suggestions
+      sha256: db5473d79fb47067fb52fdbfff3399dc4f6bbd162eeb5bde0c6d61fafcbc104b
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.1.0"
+  flutter_staggered_animations:
+    dependency: "direct main"
+    description:
+      name: flutter_staggered_animations
+      sha256: "81d3c816c9bb0dca9e8a5d5454610e21ffb068aedb2bde49d2f8d04f75538351"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.1.1"
   flutter_test:
     dependency: "direct dev"
     description: flutter
@@ -392,6 +416,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.0.1"
+  home_widget:
+    dependency: "direct main"
+    description:
+      name: home_widget
+      sha256: "908d033514a981f829fd98213909e11a428104327be3b422718aa643ac9d084a"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.8.1"
   http:
     dependency: transitive
     description:

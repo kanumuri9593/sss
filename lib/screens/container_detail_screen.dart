@@ -101,8 +101,9 @@ class _ContainerDetailScreenState extends State<ContainerDetailScreen> {
     _searchDebounceTimer?.cancel();
     _searchDebounceTimer = Timer(const Duration(milliseconds: 300), () {
       if (!mounted) return;
-      if (_searchController.text != query)
+      if (_searchController.text != query) {
         return; // Query changed, ignore this update
+      }
       setState(() {
         if (query.isEmpty) {
           _filteredItems = _items;

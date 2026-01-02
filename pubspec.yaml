@@ -78,6 +78,10 @@ dependencies:
 
   # Google ML Kit for cloud-based image labeling (optional)
   google_mlkit_image_labeling: ^0.13.0
+  home_widget: ^0.8.1
+  flutter_siri_suggestions: ^2.1.0
+  flutter_core_spotlight: ^1.0.4
+  flutter_staggered_animations: ^1.1.1
 
 dev_dependencies:
   flutter_test:
