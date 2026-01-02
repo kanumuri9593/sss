@@ -320,6 +320,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
               _buildSectionHeader('Image Recognition'),
               _buildImageRecognitionSettings(),
 
+              // App Info section
+              _buildSectionHeader('App Info'),
+              _buildAppInfoSection(),
+
               const SizedBox(height: 24),
             ]),
           ),
@@ -475,6 +479,149 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// Build app info section
+  Widget _buildAppInfoSection() {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(
+        children: [
+          // Version
+          ListTile(
+            leading: Icon(
+              Icons.info_outline,
+              color: colorScheme.primary,
+            ),
+            title: const Text('Version'),
+            subtitle: const Text('1.0.0+1'),
+          ),
+          const Divider(height: 1),
+
+          // About
+          ListTile(
+            leading: Icon(
+              Icons.article_outlined,
+              color: colorScheme.primary,
+            ),
+            title: const Text('About'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              _showAboutDialog();
+            },
+          ),
+          const Divider(height: 1),
+
+          // Feedback
+          ListTile(
+            leading: Icon(
+              Icons.feedback_outlined,
+              color: colorScheme.primary,
+            ),
+            title: const Text('Feedback'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              _showFeedbackDialog();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Show about dialog
+  void _showAboutDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('About SSS'),
+        content: const SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'SSS - Smart Storage System',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 8),
+              Text('Version: 1.0.0+1'),
+              SizedBox(height: 16),
+              Text(
+                'A Flutter application for managing your storage with intelligent image recognition and tagging.',
+              ),
+              SizedBox(height: 16),
+              Text(
+                '© 2024 SSS Team. All rights reserved.',
+                style: TextStyle(fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Show feedback dialog
+  void _showFeedbackDialog() {
+    final controller = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Send Feedback'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'We value your feedback! Let us know how we can improve.',
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                labelText: 'Your feedback',
+                hintText: 'Enter your feedback here...',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 5,
+              autofocus: true,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final feedback = controller.text.trim();
+              if (feedback.isNotEmpty) {
+                // In a real app, this would send feedback to a server
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Thank you for your feedback!'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              }
+              Navigator.of(context).pop();
+            },
+            child: const Text('Send'),
+          ),
+        ],
       ),
     );
   }
