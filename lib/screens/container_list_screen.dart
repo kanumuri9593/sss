@@ -11,11 +11,12 @@ import '../widgets/glass_components.dart';
 import '../widgets/spring_animations.dart';
 import '../widgets/illustrations.dart';
 import '../widgets/celebrations.dart';
-import '../navigation/custom_transitions.dart';
-import 'container_detail_screen.dart';
-import 'container_create_screen.dart';
-import 'profile_screen.dart';
+import '../widgets/animated_fab.dart';
+import '../navigation/navigation_helper.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
+import '../services/permission_service.dart';
+import 'package:permission_handler/permission_handler.dart' as ph;
 
 /// Container List Screen - Award-Winning UI Redesign
 ///
@@ -40,10 +41,7 @@ class _ContainerListScreenState extends State<ContainerListScreen>
   List<models.Container> _filteredContainers = [];
   bool _isGridView = true;
   Timer? _searchDebounceTimer;
-  final bool _isSearchExpanded = false;
   bool _showCelebration = false;
-  late AnimationController _fabController;
-  late Animation<double> _fabRotation;
 
   @override
   void initState() {
@@ -51,18 +49,38 @@ class _ContainerListScreenState extends State<ContainerListScreen>
     WidgetsBinding.instance.addObserver(this);
     _searchController.addListener(_onSearchChanged);
 
-    _fabController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    );
-    _fabRotation = Tween<double>(begin: 0, end: 0.125).animate(
-      CurvedAnimation(parent: _fabController, curve: Curves.easeOutCubic),
-    );
-
     CacheService.initialize();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadContainers();
+      // Request permissions after UI is ready (this ensures app appears in Settings)
+      _requestPermissionsIfNeeded();
     });
+  }
+  
+  /// Request permissions proactively after first screen load
+  /// This ensures the app appears in iOS Settings
+  Future<void> _requestPermissionsIfNeeded() async {
+    try {
+      // Small delay to ensure UI is fully rendered
+      await Future.delayed(const Duration(milliseconds: 500));
+      
+      // Check if permissions have been requested before
+      final cameraRequested = await PermissionService.hasBeenRequested(ph.Permission.camera);
+      final photosRequested = await PermissionService.hasBeenRequested(ph.Permission.photos);
+      
+      // Only request if not already requested (to avoid annoying users)
+      if (!cameraRequested) {
+        debugPrint('[ContainerList] Requesting camera permission proactively');
+        await PermissionService.requestCameraPermission();
+      }
+      
+      if (!photosRequested) {
+        debugPrint('[ContainerList] Requesting photos permission proactively');
+        await PermissionService.requestPhotosPermission();
+      }
+    } catch (e) {
+      debugPrint('[ContainerList] Error requesting permissions: $e');
+    }
   }
 
   @override
@@ -79,7 +97,6 @@ class _ContainerListScreenState extends State<ContainerListScreen>
     _searchDebounceTimer?.cancel();
     _searchController.dispose();
     _scrollController.dispose();
-    _fabController.dispose();
     super.dispose();
   }
 
@@ -179,12 +196,9 @@ class _ContainerListScreenState extends State<ContainerListScreen>
   }
 
   void _navigateToCreate() async {
-    _fabController.forward();
     HapticFeedback.lightImpact();
 
-    final result = await navigateScale(context, const ContainerCreateScreen());
-
-    _fabController.reverse();
+    final result = await context.push('/containers/create');
 
     if (result == true) {
       // Show celebration for new container
@@ -201,17 +215,13 @@ class _ContainerListScreenState extends State<ContainerListScreen>
 
   void _navigateToDetail(models.Container container) async {
     HapticFeedback.selectionClick();
-    await navigateSlide(
-      context,
-      ContainerDetailScreen(containerId: container.id),
-    );
+    NavigationHelper.goToContainer(context, container.id);
     _refreshContainers();
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
     final totalItems = ItemService.getAllItems().length;
 
     return Scaffold(
@@ -251,7 +261,9 @@ class _ContainerListScreenState extends State<ContainerListScreen>
           ),
         ),
       ),
-      floatingActionButton: _buildFAB(context),
+      floatingActionButton: _filteredContainers.isNotEmpty
+          ? _buildFAB(context)
+          : null,
     );
   }
 
@@ -285,7 +297,7 @@ class _ContainerListScreenState extends State<ContainerListScreen>
         ),
         SpringScale(
           onTap: () {
-            navigateSlide(context, const ProfileScreen());
+            NavigationHelper.goToProfile(context);
           },
           child: Container(
             margin: const EdgeInsets.only(right: 8),
@@ -306,7 +318,6 @@ class _ContainerListScreenState extends State<ContainerListScreen>
 
   Widget _buildHeader(BuildContext context, int totalItems) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
 
     return Container(
       padding: EdgeInsets.fromLTRB(
@@ -535,22 +546,11 @@ class _ContainerListScreenState extends State<ContainerListScreen>
   Widget _buildFAB(BuildContext context) {
     final theme = Theme.of(context);
 
-    return GlassFAB(
+    return AnimatedFAB(
       onPressed: _navigateToCreate,
       backgroundColor: theme.colorScheme.primary,
-      child: AnimatedBuilder(
-        animation: _fabRotation,
-        builder: (context, child) {
-          return Transform.rotate(
-            angle: _fabRotation.value * 3.14159 * 2,
-            child: Icon(
-              Icons.add_rounded,
-              color: theme.colorScheme.onPrimary,
-              size: 28,
-            ),
-          );
-        },
-      ),
+      foregroundColor: theme.colorScheme.onPrimary,
+      tooltip: 'Add container',
     );
   }
 }

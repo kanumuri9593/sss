@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../models/app_settings.dart';
 import '../services/preferences_service.dart';
@@ -11,6 +12,10 @@ import '../theme/tokens/app_spacing.dart';
 import '../widgets/glass_components.dart';
 import '../widgets/spring_animations.dart';
 import '../widgets/animated_widgets.dart';
+import '../presentation/providers/service_providers.dart';
+import '../presentation/providers/initialization_provider.dart';
+import '../presentation/controllers/settings_controller.dart';
+import '../services/permission_service.dart';
 
 /// Profile Screen - Award-Winning UI Redesign
 ///
@@ -19,15 +24,14 @@ import '../widgets/animated_widgets.dart';
 /// - Animated theme previews
 /// - Settings in expandable glass sections
 /// - Fun illustrations for each section
-class ProfileScreen extends StatefulWidget {
+class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
 
   @override
-  State<ProfileScreen> createState() => _ProfileScreenState();
+  ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> {
-  late AppSettings _settings;
+class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   String _storagePath = '';
   String _cacheSizeDisplay = 'Calculating...';
   Map<Permission, PermissionStatus> _permissions = {};
@@ -36,7 +40,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
-    _settings = PreferencesService.settings;
     _loadData();
   }
 
@@ -44,32 +47,70 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final storagePath = await PreferencesService.getStoragePath();
     final cacheBytes = await PreferencesService.getImageCacheSizeBytes();
     final cacheSizeDisplay = PreferencesService.formatBytes(cacheBytes);
-    final cameraStatus = await Permission.camera.status;
-    final storageStatus = await Permission.storage.status;
+    
+    // Use PermissionService for centralized permission management
+    await PermissionService.refreshPermissionCache();
+    final allPermissions = await PermissionService.getAllPermissionStatuses();
 
     if (mounted) {
       setState(() {
         _storagePath = storagePath;
         _cacheSizeDisplay = cacheSizeDisplay;
-        _permissions = {
-          Permission.camera: cameraStatus,
-          Permission.storage: storageStatus,
-        };
+        _permissions = allPermissions;
         _isLoading = false;
+      });
+    }
+  }
+  
+  /// Refresh permission statuses
+  Future<void> _refreshPermissions() async {
+    await PermissionService.refreshPermissionCache();
+    final allPermissions = await PermissionService.getAllPermissionStatuses();
+    if (mounted) {
+      setState(() {
+        _permissions = allPermissions;
       });
     }
   }
 
   void _updateSettings(AppSettings newSettings) async {
     HapticFeedback.selectionClick();
-    setState(() {
-      _settings = newSettings;
-    });
-    await PreferencesService.updateSettings(newSettings);
+    final settingsService = ref.read(settingsServiceProvider);
+    await settingsService.updateSettings(newSettings);
+    // Also update PreferencesService for backward compatibility
+    if (PreferencesService.isInitialized) {
+      await PreferencesService.updateSettings(newSettings);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    // Wait for initialization
+    final initialization = ref.watch(initializationProvider);
+    final settingsAsync = ref.watch(settingsProvider);
+    
+    if (initialization.isLoading || settingsAsync.isLoading) {
+      return Scaffold(
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+    
+    if (initialization.hasError || settingsAsync.hasError) {
+      return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, size: 64, color: Colors.red),
+              const SizedBox(height: 16),
+              Text('Error: ${initialization.hasError ? initialization.error : settingsAsync.error}'),
+            ],
+          ),
+        ),
+      );
+    }
+    
+    final settings = settingsAsync.value ?? AppSettings.defaultSettings();
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
@@ -116,11 +157,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             icon: Icons.palette_rounded,
                             emoji: '🎨',
                             children: [
-                              _buildThemeSelector(colorScheme),
+                              _buildThemeSelector(colorScheme, settings),
                               _buildGlassDivider(),
-                              _buildFontScaleSelector(colorScheme),
+                              _buildFontScaleSelector(colorScheme, settings),
                               _buildGlassDivider(),
-                              _buildDynamicTypeToggle(),
+                              _buildDynamicTypeToggle(settings),
                             ],
                           ),
                         ),
@@ -136,11 +177,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             icon: Icons.image_search_rounded,
                             emoji: '🔍',
                             children: [
-                              _buildProviderSelector(colorScheme),
+                              _buildProviderSelector(colorScheme, settings),
                               _buildGlassDivider(),
-                              _buildConfidenceSlider(),
+                              _buildConfidenceSlider(settings),
                               _buildGlassDivider(),
-                              _buildHeuristicFallbackToggle(),
+                              _buildHeuristicFallbackToggle(settings),
                             ],
                           ),
                         ),
@@ -158,11 +199,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             children: [
                               _buildStorageLocation(),
                               _buildGlassDivider(),
-                              _buildImageCacheSettings(colorScheme),
+                              _buildImageCacheSettings(colorScheme, settings),
                               _buildGlassDivider(),
                               _buildClearCacheButton(colorScheme),
                               _buildGlassDivider(),
-                              _buildClearAllDataButton(colorScheme),
+                              _buildClearAllDataButton(colorScheme, settings),
                             ],
                           ),
                         ),
@@ -208,7 +249,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             children: [
                               _buildAboutTile('Version', '1.0.0'),
                               _buildGlassDivider(),
-                              _buildResetButton(colorScheme),
+                              _buildResetButton(colorScheme, settings),
                             ],
                           ),
                         ),
@@ -285,7 +326,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ),
                 ),
-                Text(emoji, style: const TextStyle(fontSize: 24)),
               ],
             ),
           ),
@@ -496,16 +536,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   // ========== Appearance Settings ==========
 
-  Widget _buildThemeSelector(ColorScheme colorScheme) {
+  Widget _buildThemeSelector(ColorScheme colorScheme, AppSettings settings) {
     return ListTile(
       title: const Text('Theme'),
-      subtitle: Text(_settings.themeMode.displayName),
-      trailing: const Icon(Icons.chevron_right),
-      onTap: () => _showThemeDialog(colorScheme),
+      subtitle: Text(settings.themeMode.displayName),
+      onTap: () => _showThemeDialog(colorScheme, settings),
     );
   }
 
-  void _showThemeDialog(ColorScheme colorScheme) async {
+  void _showThemeDialog(ColorScheme colorScheme, AppSettings settings) async {
     final result = await showDialog<AppThemeMode>(
       context: context,
       builder: (context) => AlertDialog(
@@ -527,7 +566,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 subtitle: Text(mode.description),
                 value: mode,
-                groupValue: _settings.themeMode,
+                groupValue: settings.themeMode,
                 onChanged: (value) => Navigator.pop(context, value),
               );
             },
@@ -543,20 +582,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
 
     if (result != null) {
-      _updateSettings(_settings.copyWith(themeMode: result));
+      _updateSettings(settings.copyWith(themeMode: result));
     }
   }
 
-  Widget _buildFontScaleSelector(ColorScheme colorScheme) {
+  Widget _buildFontScaleSelector(ColorScheme colorScheme, AppSettings settings) {
     return ListTile(
       title: const Text('Font Size'),
-      subtitle: Text(_settings.fontScale.displayName),
-      trailing: const Icon(Icons.chevron_right),
-      onTap: () => _showFontScaleDialog(),
+      subtitle: Text(settings.fontScale.displayName),
+      onTap: () => _showFontScaleDialog(settings),
     );
   }
 
-  void _showFontScaleDialog() async {
+  void _showFontScaleDialog(AppSettings settings) async {
     final result = await showDialog<FontScaleOption>(
       context: context,
       builder: (context) => AlertDialog(
@@ -568,7 +606,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               title: Text(option.displayName),
               subtitle: Text('${(option.scale * 100).toInt()}% of normal'),
               value: option,
-              groupValue: _settings.fontScale,
+              groupValue: settings.fontScale,
               onChanged: (value) => Navigator.pop(context, value),
             );
           }).toList(),
@@ -583,35 +621,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
 
     if (result != null) {
-      _updateSettings(_settings.copyWith(fontScale: result));
+      _updateSettings(settings.copyWith(fontScale: result));
     }
   }
 
-  Widget _buildDynamicTypeToggle() {
+  Widget _buildDynamicTypeToggle(AppSettings settings) {
     return SwitchListTile(
       title: const Text('Use System Font Size'),
       subtitle: const Text('Follow device accessibility settings'),
-      value: _settings.useDynamicType,
+      value: settings.useDynamicType,
       onChanged: (value) {
-        _updateSettings(_settings.copyWith(useDynamicType: value));
+        _updateSettings(settings.copyWith(useDynamicType: value));
       },
     );
   }
 
   // ========== Image Recognition Settings ==========
 
-  Widget _buildProviderSelector(ColorScheme colorScheme) {
+  Widget _buildProviderSelector(ColorScheme colorScheme, AppSettings settings) {
     return ListTile(
       title: const Text('Recognition Provider'),
       subtitle: Text(
-        _getProviderDisplayName(_settings.imageRecognitionProvider),
+        _getProviderDisplayName(settings.imageRecognitionProvider),
       ),
-      trailing: const Icon(Icons.chevron_right),
-      onTap: () => _showProviderDialog(),
+      onTap: () => _showProviderDialog(settings),
     );
   }
 
-  void _showProviderDialog() async {
+  void _showProviderDialog(AppSettings settings) async {
     final result = await showDialog<ImageRecognitionProvider>(
       context: context,
       builder: (context) => AlertDialog(
@@ -629,7 +666,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               subtitle: const Text('Offline, free, 1000 classes'),
               value: ImageRecognitionProvider.tensorflowLite,
-              groupValue: _settings.imageRecognitionProvider,
+              groupValue: settings.imageRecognitionProvider,
               onChanged: (value) => Navigator.pop(context, value),
             ),
             RadioListTile<ImageRecognitionProvider>(
@@ -642,7 +679,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               subtitle: const Text('Cloud-based, better accuracy'),
               value: ImageRecognitionProvider.mlKit,
-              groupValue: _settings.imageRecognitionProvider,
+              groupValue: settings.imageRecognitionProvider,
               onChanged: (value) => Navigator.pop(context, value),
             ),
           ],
@@ -657,30 +694,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
 
     if (result != null) {
-      _updateSettings(_settings.copyWith(imageRecognitionProvider: result));
+      _updateSettings(settings.copyWith(imageRecognitionProvider: result));
     }
   }
 
-  Widget _buildConfidenceSlider() {
+  Widget _buildConfidenceSlider(AppSettings settings) {
     return ListTile(
       title: const Text('Confidence Threshold'),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '${(_settings.confidenceThreshold * 100).toInt()}%',
+            '${(settings.confidenceThreshold * 100).toInt()}%',
             style: Theme.of(
               context,
             ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
           ),
           Slider(
-            value: _settings.confidenceThreshold,
+            value: settings.confidenceThreshold,
             min: 0.1,
             max: 0.9,
             divisions: 8,
-            label: '${(_settings.confidenceThreshold * 100).toInt()}%',
+            label: '${(settings.confidenceThreshold * 100).toInt()}%',
             onChanged: (value) {
-              _updateSettings(_settings.copyWith(confidenceThreshold: value));
+              _updateSettings(settings.copyWith(confidenceThreshold: value));
             },
           ),
           Text(
@@ -692,13 +729,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildHeuristicFallbackToggle() {
+  Widget _buildHeuristicFallbackToggle(AppSettings settings) {
     return SwitchListTile(
       title: const Text('Use Heuristic Fallback'),
       subtitle: const Text('Generate basic tags when ML fails'),
-      value: _settings.useHeuristicFallback,
+      value: settings.useHeuristicFallback,
       onChanged: (value) {
-        _updateSettings(_settings.copyWith(useHeuristicFallback: value));
+        _updateSettings(settings.copyWith(useHeuristicFallback: value));
       },
     );
   }
@@ -723,29 +760,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
       ),
-      trailing: IconButton(
-        icon: const Icon(Icons.copy),
-        onPressed: () {
-          // Copy path to clipboard
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Path copied to clipboard')),
-          );
-        },
-        tooltip: 'Copy path',
-      ),
+      onTap: () {
+        // Copy path to clipboard
+        Clipboard.setData(ClipboardData(text: _storagePath));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Path copied to clipboard')),
+        );
+      },
     );
   }
 
-  Widget _buildImageCacheSettings(ColorScheme colorScheme) {
+  Widget _buildImageCacheSettings(ColorScheme colorScheme, AppSettings settings) {
     return ListTile(
       title: const Text('Image Cache Size Limit'),
-      subtitle: Text(_settings.imageCacheSize.displayName),
-      trailing: const Icon(Icons.chevron_right),
-      onTap: () => _showCacheSizeDialog(),
+      subtitle: Text(settings.imageCacheSize.displayName),
+      onTap: () => _showCacheSizeDialog(settings),
     );
   }
 
-  void _showCacheSizeDialog() async {
+  void _showCacheSizeDialog(AppSettings settings) async {
     final result = await showDialog<ImageCacheSize>(
       context: context,
       builder: (context) => AlertDialog(
@@ -756,7 +789,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             return RadioListTile<ImageCacheSize>(
               title: Text(size.displayName),
               value: size,
-              groupValue: _settings.imageCacheSize,
+              groupValue: settings.imageCacheSize,
               onChanged: (value) => Navigator.pop(context, value),
             );
           }).toList(),
@@ -771,7 +804,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
 
     if (result != null) {
-      _updateSettings(_settings.copyWith(imageCacheSize: result));
+      _updateSettings(settings.copyWith(imageCacheSize: result));
     }
   }
 
@@ -779,48 +812,44 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return ListTile(
       title: const Text('Clear Image Cache'),
       subtitle: Text('Current size: $_cacheSizeDisplay'),
-      trailing: TextButton(
-        onPressed: () async {
-          final confirmed = await showDialog<bool>(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: const Text('Clear Cache?'),
-              content: const Text(
-                'This will remove all cached images. They will be reloaded when needed.',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  child: const Text('Cancel'),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.pop(context, true),
-                  child: const Text('Clear'),
-                ),
-              ],
+      onTap: () async {
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Clear Cache?'),
+            content: const Text(
+              'This will remove all cached images. They will be reloaded when needed.',
             ),
-          );
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Clear'),
+              ),
+            ],
+          ),
+        );
 
-          if (confirmed == true) {
-            await PreferencesService.clearImageCache();
-            await _loadData();
-            if (mounted) {
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(const SnackBar(content: Text('Cache cleared')));
-            }
+        if (confirmed == true) {
+          await PreferencesService.clearImageCache();
+          await _loadData();
+          if (mounted) {
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(const SnackBar(content: Text('Cache cleared')));
           }
-        },
-        child: const Text('Clear'),
-      ),
+        }
+      },
     );
   }
 
-  Widget _buildClearAllDataButton(ColorScheme colorScheme) {
+  Widget _buildClearAllDataButton(ColorScheme colorScheme, AppSettings settings) {
     return ListTile(
       title: Text('Clear All Data', style: TextStyle(color: colorScheme.error)),
       subtitle: const Text('Remove all containers, items, and settings'),
-      trailing: Icon(Icons.warning_amber, color: colorScheme.error),
       onTap: () async {
         final confirmed = await showDialog<bool>(
           context: context,
@@ -845,10 +874,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
         if (confirmed == true) {
           await StorageService.clearAll();
-          await PreferencesService.resetToDefaults();
-          setState(() {
-            _settings = PreferencesService.settings;
-          });
+          final settingsService = ref.read(settingsServiceProvider);
+          await settingsService.resetToDefaults();
+          // Also update PreferencesService for backward compatibility
+          if (PreferencesService.isInitialized) {
+            await PreferencesService.resetToDefaults();
+          }
           await _loadData();
           if (mounted) {
             ScaffoldMessenger.of(
@@ -874,41 +905,112 @@ class _ProfileScreenState extends State<ProfileScreen> {
     Color statusColor;
     String statusText;
     IconData statusIcon;
+    String actionText;
 
     if (status.isGranted) {
       statusColor = Colors.green;
       statusText = 'Granted';
       statusIcon = Icons.check_circle;
+      actionText = 'Tap to open Settings';
     } else if (status.isPermanentlyDenied) {
       statusColor = colorScheme.error;
       statusText = 'Denied';
       statusIcon = Icons.cancel;
+      actionText = 'Tap to open Settings';
     } else {
+      // status.isDenied means permission hasn't been asked yet
       statusColor = Colors.orange;
-      statusText = 'Not Set';
-      statusIcon = Icons.help;
+      statusText = 'Not Asked';
+      statusIcon = Icons.help_outline;
+      actionText = 'Tap to request permission';
     }
 
     return ListTile(
       leading: Icon(icon, color: colorScheme.primary),
       title: Text(title),
-      subtitle: Text(description),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(description),
+          const SizedBox(height: 4),
+          Text(
+            actionText,
+            style: TextStyle(
+              fontSize: 12,
+              color: colorScheme.primary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(statusIcon, color: statusColor, size: 16),
-          const SizedBox(width: 4),
-          Text(statusText, style: TextStyle(color: statusColor, fontSize: 12)),
+          Icon(statusIcon, color: statusColor, size: 20),
+          const SizedBox(width: 8),
+          Text(
+            statusText,
+            style: TextStyle(
+              color: statusColor,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ],
       ),
       onTap: () async {
         if (status.isPermanentlyDenied) {
+          // Open Settings if permanently denied
           await openAppSettings();
-        } else if (!status.isGranted) {
-          final newStatus = await permission.request();
-          setState(() {
-            _permissions[permission] = newStatus;
-          });
+          await Future.delayed(const Duration(seconds: 1));
+          await _refreshPermissions();
+        } else {
+          // Request permission if not granted (includes "denied" which means not asked yet)
+          debugPrint('[ProfileScreen] Requesting $title permission. Current status: $status');
+          
+          // Show loading indicator
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Requesting permission...'),
+                duration: Duration(seconds: 1),
+              ),
+            );
+          }
+          
+          final newStatus = await PermissionService.requestPermission(permission);
+          await _refreshPermissions();
+          
+          // Show feedback
+          if (mounted) {
+            String message;
+            if (newStatus.isGranted) {
+              message = '$title permission granted! ✅';
+            } else if (newStatus.isPermanentlyDenied) {
+              message = '$title permission denied. Tap "Open Settings" to enable it.';
+            } else if (newStatus.isDenied) {
+              message = '$title permission not granted. The app should now appear in Settings.';
+            } else {
+              message = '$title permission status: $newStatus';
+            }
+            
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(message),
+                duration: const Duration(seconds: 4),
+                action: newStatus.isPermanentlyDenied
+                    ? SnackBarAction(
+                        label: 'Open Settings',
+                        onPressed: () async {
+                          await openAppSettings();
+                          await Future.delayed(const Duration(seconds: 1));
+                          await _refreshPermissions();
+                        },
+                      )
+                    : null,
+              ),
+            );
+          }
         }
       },
     );
@@ -928,46 +1030,45 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildResetButton(ColorScheme colorScheme) {
+  Widget _buildResetButton(ColorScheme colorScheme, AppSettings settings) {
     return ListTile(
       title: const Text('Reset to Defaults'),
       subtitle: const Text('Restore all settings to default values'),
-      trailing: TextButton(
-        onPressed: () async {
-          final confirmed = await showDialog<bool>(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: const Text('Reset Settings?'),
-              content: const Text(
-                'This will reset all preferences to their default values. Your data will not be affected.',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  child: const Text('Cancel'),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.pop(context, true),
-                  child: const Text('Reset'),
-                ),
-              ],
+      onTap: () async {
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Reset Settings?'),
+            content: const Text(
+              'This will reset all preferences to their default values. Your data will not be affected.',
             ),
-          );
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Reset'),
+              ),
+            ],
+          ),
+        );
 
-          if (confirmed == true) {
+        if (confirmed == true) {
+          final settingsService = ref.read(settingsServiceProvider);
+          await settingsService.resetToDefaults();
+          // Also update PreferencesService for backward compatibility
+          if (PreferencesService.isInitialized) {
             await PreferencesService.resetToDefaults();
-            setState(() {
-              _settings = PreferencesService.settings;
-            });
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Settings reset to defaults')),
-              );
-            }
           }
-        },
-        child: const Text('Reset'),
-      ),
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Settings reset to defaults')),
+            );
+          }
+        }
+      },
     );
   }
 }

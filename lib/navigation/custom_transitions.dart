@@ -9,7 +9,7 @@ import 'package:flutter/material.dart';
 // SLIDE FADE TRANSITION - Pages slide in with fade
 // ============================================================================
 
-class SlideFadeTransition<T> extends PageRouteBuilder<T> {
+class SlideFadeTransition<T> extends PageRoute<T> {
   final Widget page;
   final Duration duration;
   final Curve curve;
@@ -20,29 +20,53 @@ class SlideFadeTransition<T> extends PageRouteBuilder<T> {
     this.duration = const Duration(milliseconds: 350),
     this.curve = Curves.easeOutCubic,
     this.beginOffset = const Offset(0.0, 0.1),
-  }) : super(
-         transitionDuration: duration,
-         reverseTransitionDuration: duration,
-         pageBuilder: (context, animation, secondaryAnimation) => page,
-         transitionsBuilder: (context, animation, secondaryAnimation, child) {
-           final slideAnimation = Tween<Offset>(
-             begin: beginOffset,
-             end: Offset.zero,
-           ).animate(CurvedAnimation(parent: animation, curve: curve));
+  });
 
-           final fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-             CurvedAnimation(
-               parent: animation,
-               curve: const Interval(0.0, 0.7, curve: Curves.easeOut),
-             ),
-           );
+  @override
+  Color? get barrierColor => null;
 
-           return FadeTransition(
-             opacity: fadeAnimation,
-             child: SlideTransition(position: slideAnimation, child: child),
-           );
-         },
-       );
+  @override
+  String? get barrierLabel => null;
+
+  @override
+  bool get maintainState => true;
+
+  @override
+  Duration get transitionDuration => duration;
+
+  @override
+  Widget buildPage(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+  ) {
+    return page;
+  }
+
+  @override
+  Widget buildTransitions(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    final slideAnimation = Tween<Offset>(
+      begin: beginOffset,
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: animation, curve: curve));
+
+    final fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: animation,
+        curve: const Interval(0.0, 0.7, curve: Curves.easeOut),
+      ),
+    );
+
+    return FadeTransition(
+      opacity: fadeAnimation,
+      child: SlideTransition(position: slideAnimation, child: child),
+    );
+  }
 }
 
 // ============================================================================

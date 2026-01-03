@@ -9,6 +9,8 @@ import '../services/container_service.dart';
 import '../services/item_service.dart';
 import '../services/qr_service.dart';
 import '../services/nfc_tag_storage_service.dart';
+import '../widgets/animated_fab.dart';
+import '../widgets/glass_components.dart';
 import 'item_create_screen.dart';
 import 'container_create_screen.dart';
 import 'nfc_tag_management_screen.dart';
@@ -502,11 +504,26 @@ class _ContainerDetailScreenState extends State<ContainerDetailScreen> {
                       ),
                     ),
                     if (_searchController.text.isEmpty) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        'Tap + to add an item',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      const SizedBox(height: 24),
+                      GlassButton(
+                        onPressed: _addItem,
+                        glowColor: Theme.of(context).colorScheme.primary,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.add_rounded,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Add Item',
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.primary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
@@ -598,7 +615,6 @@ class _ContainerDetailScreenState extends State<ContainerDetailScreen> {
                                     onPressed: () => _deleteItem(item),
                                     tooltip: 'Delete item',
                                   ),
-                                  const Icon(Icons.drag_handle),
                                 ],
                               ),
                               onTap: () => _editItem(item),
@@ -613,11 +629,14 @@ class _ContainerDetailScreenState extends State<ContainerDetailScreen> {
             }),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _addItem,
-        tooltip: 'Add item',
-        child: const Icon(Icons.add),
-      ),
+      floatingActionButton: _filteredItems.isNotEmpty
+          ? AnimatedFAB(
+              onPressed: _addItem,
+              tooltip: 'Add item',
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              foregroundColor: Theme.of(context).colorScheme.onPrimary,
+            )
+          : null,
     );
   }
 

@@ -128,7 +128,6 @@ class _NFCPOCScreenState extends State<NFCPOCScreen> {
                 leading: const Icon(Icons.nfc),
                 title: Text(tag.category ?? 'Untitled Tag'),
                 subtitle: Text(tag.data),
-                trailing: const Icon(Icons.chevron_right),
                 onTap: () {
                   Navigator.pop(context);
                   Navigator.push(

@@ -83,6 +83,12 @@ dependencies:
   flutter_core_spotlight: ^1.0.4
   flutter_staggered_animations: ^1.1.1
 
+  # State Management
+  flutter_riverpod: ^2.6.1
+
+  # Navigation with deep linking
+  go_router: ^14.2.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
