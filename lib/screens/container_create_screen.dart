@@ -1,16 +1,19 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as path;
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:permission_handler/permission_handler.dart' as ph;
 import '../models/container.dart' as models;
-import '../services/container_service.dart';
+import '../presentation/providers/service_providers.dart';
 import '../services/qr_service.dart';
 import '../services/nfc_service.dart';
 import '../services/nfc_tag_storage_service.dart';
 import '../models/qr_data.dart';
 import '../utils/file_utils.dart';
 import '../services/image_recognition_service.dart';
+import '../services/permission_service.dart';
 import '../widgets/tag_editor_widget.dart';
 import 'nfc_tag_management_screen.dart';
 
@@ -18,16 +21,16 @@ import 'nfc_tag_management_screen.dart';
 ///
 /// Allows users to create or edit containers with photo, type selection,
 /// and QR code generation. After creation, shows QR code below with edit/download options.
-class ContainerCreateScreen extends StatefulWidget {
+class ContainerCreateScreen extends ConsumerStatefulWidget {
   final models.Container? container;
 
   const ContainerCreateScreen({super.key, this.container});
 
   @override
-  State<ContainerCreateScreen> createState() => _ContainerCreateScreenState();
+  ConsumerState<ContainerCreateScreen> createState() => _ContainerCreateScreenState();
 }
 
-class _ContainerCreateScreenState extends State<ContainerCreateScreen> {
+class _ContainerCreateScreenState extends ConsumerState<ContainerCreateScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _descriptionController = TextEditingController();
@@ -126,6 +129,7 @@ class _ContainerCreateScreenState extends State<ContainerCreateScreen> {
 
     final container = _createdContainer!;
     final deepLink = container.buildDeepLink();
+    final containerService = ref.read(containerServiceProvider);
 
     // Generate QR code with deep link
     _qrDeepLink = QRService.generateDeepLink(
@@ -139,18 +143,19 @@ class _ContainerCreateScreenState extends State<ContainerCreateScreen> {
     // Extract QR ID from deep link
     _qrId = QRData.extractIdFromDeepLink(_qrDeepLink!);
     if (_qrId != null) {
-      ContainerService.linkQRCode(container.id, _qrId!);
+      containerService.linkQRCode(container.id, _qrId!);
     }
   }
 
   void _loadAvailableParents() {
-    final allContainers = ContainerService.getAllContainers();
+    final containerService = ref.read(containerServiceProvider);
+    final allContainers = containerService.getAllContainers();
     // Exclude current container and its children from parent options
     if (widget.container != null) {
       final excludeIds = {widget.container!.id};
       // Add all nested containers recursively
       void addNested(String containerId) {
-        final children = ContainerService.getChildContainers(containerId);
+        final children = containerService.getChildContainers(containerId);
         for (var child in children) {
           excludeIds.add(child.id);
           addNested(child.id);
@@ -193,19 +198,131 @@ class _ContainerCreateScreenState extends State<ContainerCreateScreen> {
     if (source == null) return;
 
     // Wait for dialog to fully dismiss on iOS before opening picker
-    await Future.delayed(const Duration(milliseconds: 300));
+    // iOS needs more time to fully dismiss the dialog
+    await Future.delayed(Platform.isIOS 
+        ? const Duration(milliseconds: 500) 
+        : const Duration(milliseconds: 300));
 
     if (!mounted) return;
+
+    // Check and request permissions before picking image
+    try {
+      ph.Permission permission;
+      if (source == ImageSource.camera) {
+        permission = ph.Permission.camera;
+      } else {
+        // For gallery, use photos permission on iOS
+        permission = Platform.isIOS ? ph.Permission.photos : ph.Permission.storage;
+      }
+
+      final status = await PermissionService.getPermissionStatus(permission);
+      
+      if (!status.isGranted && !status.isLimited) {
+        // Request permission
+        final requestedStatus = await PermissionService.requestPermission(permission);
+        
+        if (!requestedStatus.isGranted && !requestedStatus.isLimited) {
+          if (mounted) {
+            // Show dialog to open settings if permanently denied
+            if (requestedStatus.isPermanentlyDenied) {
+              final shouldOpen = await showDialog<bool>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('Permission Required'),
+                  content: Text(
+                    source == ImageSource.camera
+                        ? 'Camera permission is required to take photos. Please enable it in Settings.'
+                        : 'Photo library permission is required to select photos. Please enable it in Settings.',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(false),
+                      child: const Text('Cancel'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(true),
+                      child: const Text('Open Settings'),
+                    ),
+                  ],
+                ),
+              );
+              
+              if (shouldOpen == true) {
+                await PermissionService.openAppSettings();
+              }
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    source == ImageSource.camera
+                        ? 'Camera permission is required'
+                        : 'Photo library permission is required',
+                  ),
+                ),
+              );
+            }
+          }
+          return;
+        } else {
+          // Permission was just granted - wait a moment for iOS to process it
+          if (Platform.isIOS) {
+            await Future.delayed(const Duration(milliseconds: 300));
+            if (!mounted) return;
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[ContainerCreate] Error checking permissions: $e');
+      // Continue anyway - the picker might still work
+    }
+
+    if (!mounted) return;
+
+    // On iOS, ensure we wait for the next frame before opening picker
+    // This prevents issues with dialog dismissal and picker presentation
+    if (Platform.isIOS) {
+      await Future.delayed(const Duration(milliseconds: 100));
+      if (!mounted) return;
+    }
 
     try {
       setState(() {
         _isProcessingImage = true;
       });
 
-      final pickedFile = await picker.pickImage(
-        source: source,
-        imageQuality: 85,
-      );
+      // Pick image with timeout to prevent hanging on iOS
+      XFile? pickedFile;
+      try {
+        // On iOS, the image picker handles permissions automatically
+        // But we've already checked/requested them above for better UX
+        pickedFile = await picker.pickImage(
+          source: source,
+          imageQuality: 85,
+        ).timeout(
+          const Duration(seconds: 30),
+          onTimeout: () {
+            debugPrint('[ContainerCreate] Image picker timed out');
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Image picker timed out. Please try again.'),
+                ),
+              );
+            }
+            return null;
+          },
+        );
+      } catch (e) {
+        debugPrint('[ContainerCreate] Error picking image: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to pick image: ${e.toString()}'),
+            ),
+          );
+        }
+        return;
+      }
       if (pickedFile != null) {
         final fileName =
             'container_${DateTime.now().millisecondsSinceEpoch}${path.extension(pickedFile.path)}';
@@ -296,6 +413,8 @@ class _ContainerCreateScreenState extends State<ContainerCreateScreen> {
     });
 
     try {
+      final containerService = ref.read(containerServiceProvider);
+      
       if (widget.container != null) {
         // Update existing container
         final updated = widget.container!.copyWith(
@@ -308,7 +427,7 @@ class _ContainerCreateScreenState extends State<ContainerCreateScreen> {
           parentContainerId: _selectedParentContainerId,
           tags: _tags,
         );
-        await ContainerService.updateContainer(updated);
+        await containerService.updateContainer(updated);
         _createdContainer = updated;
       } else {
         // Create new container
@@ -322,7 +441,7 @@ class _ContainerCreateScreenState extends State<ContainerCreateScreen> {
               : _descriptionController.text,
           tags: _tags,
         );
-        await ContainerService.createContainer(container);
+        await containerService.createContainer(container);
         _createdContainer = container;
         // Generate QR code after creation
         _generateQRCode();
@@ -489,8 +608,9 @@ class _ContainerCreateScreenState extends State<ContainerCreateScreen> {
       });
 
       // Update container with NFC tag ID
+      final containerService = ref.read(containerServiceProvider);
       final updated = _createdContainer!.copyWith(nfcTagId: result.tagId);
-      await ContainerService.updateContainer(updated);
+      await containerService.updateContainer(updated);
       _createdContainer = updated;
 
       if (mounted) {
@@ -523,7 +643,8 @@ class _ContainerCreateScreenState extends State<ContainerCreateScreen> {
     );
 
     if (confirmed == true) {
-      await ContainerService.unlinkNFCTag(_createdContainer!.id);
+      final containerService = ref.read(containerServiceProvider);
+      await containerService.unlinkNFCTag(_createdContainer!.id);
       if (_linkedNFCTag != null) {
         await NFCTagStorageService.unlinkTagFromContainer(_linkedNFCTag!.id);
       }
@@ -534,7 +655,7 @@ class _ContainerCreateScreenState extends State<ContainerCreateScreen> {
       });
 
       // Reload container
-      _createdContainer = ContainerService.getContainer(_createdContainer!.id);
+      _createdContainer = containerService.getContainer(_createdContainer!.id);
 
       if (mounted) {
         ScaffoldMessenger.of(

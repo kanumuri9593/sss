@@ -83,8 +83,6 @@ class AppTheme {
         return _buildForestGreenTheme();
       case AppThemeMode.sunsetOrange:
         return _buildSunsetOrangeTheme();
-      case AppThemeMode.sunsetOrange:
-        return _buildSunsetOrangeTheme();
       case AppThemeMode.modern:
         return _buildModernTheme();
       default:

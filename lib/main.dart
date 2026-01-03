@@ -5,6 +5,7 @@ import 'theme/app_theme.dart';
 import 'theme/app_theme_mode.dart';
 import 'models/app_settings.dart';
 import 'presentation/controllers/settings_controller.dart';
+import 'presentation/states/settings_state.dart';
 import 'services/widget_service.dart';
 import 'services/siri_spotlight_service.dart';
 import 'services/google_assistant_service.dart';
@@ -96,9 +97,11 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     // Watch router
     final router = ref.watch(routerProvider);
     
-    // Watch settings for theme
-    final settingsAsync = ref.watch(settingsProvider);
-    final settings = settingsAsync.value ?? AppSettings.defaultSettings();
+    // Watch settings controller for reactive theme updates
+    final settingsState = ref.watch(settingsControllerProvider);
+    final settings = settingsState is SettingsLoaded 
+        ? settingsState.settings 
+        : AppSettings.defaultSettings();
     final themeMode = settings.themeMode;
     final fontScale = settings.fontScale.scale;
     final useDynamicType = settings.useDynamicType;
@@ -115,16 +118,32 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
         ? MediaQuery.textScalerOf(context)
         : TextScaler.linear(fontScale);
 
+    // Determine which theme to use based on the selected theme mode
+    final flutterThemeMode = _getThemeMode(themeMode);
+    final isCustomLightTheme = themeMode == AppThemeMode.retro ||
+                               themeMode == AppThemeMode.highContrast ||
+                               themeMode == AppThemeMode.oceanBlue ||
+                               themeMode == AppThemeMode.forestGreen ||
+                               themeMode == AppThemeMode.sunsetOrange;
+    final isCustomDarkTheme = themeMode == AppThemeMode.modern;
+    
     return MediaQuery(
       data: MediaQuery.of(context).copyWith(textScaler: textScaler),
       child: MaterialApp.router(
         title: 'SSS - Search & Scan',
-        theme: theme,
-        darkTheme: AppTheme.buildTheme(
-          themeMode: AppThemeMode.dark,
-          systemBrightness: Brightness.dark,
-        ),
-        themeMode: _getThemeMode(themeMode),
+        theme: isCustomLightTheme
+            ? theme // Use custom light theme
+            : AppTheme.buildTheme(
+                themeMode: AppThemeMode.light,
+                systemBrightness: Brightness.light,
+              ),
+        darkTheme: isCustomDarkTheme
+            ? theme // Use custom dark theme (modern)
+            : AppTheme.buildTheme(
+                themeMode: AppThemeMode.dark,
+                systemBrightness: Brightness.dark,
+              ),
+        themeMode: flutterThemeMode,
         routerConfig: router,
         debugShowCheckedModeBanner: false,
       ),
@@ -140,9 +159,9 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       case AppThemeMode.oceanBlue:
       case AppThemeMode.forestGreen:
       case AppThemeMode.sunsetOrange:
-      case AppThemeMode.modern:
         return ThemeMode.light;
       case AppThemeMode.dark:
+      case AppThemeMode.modern: // Modern theme uses dark colors
         return ThemeMode.dark;
       case AppThemeMode.system:
         return ThemeMode.system;

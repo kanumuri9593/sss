@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/app_settings.dart';
 import '../services/preferences_service.dart';
-import '../presentation/providers/service_providers.dart';
 import '../presentation/providers/initialization_provider.dart';
 import '../presentation/controllers/settings_controller.dart';
+import '../presentation/states/settings_state.dart';
 
 /// Settings Screen
 ///
@@ -16,16 +16,16 @@ class SettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     // Wait for initialization
     final initialization = ref.watch(initializationProvider);
-    final settingsAsync = ref.watch(settingsProvider);
+    final settingsState = ref.watch(settingsControllerProvider);
     
-    if (initialization.isLoading || settingsAsync.isLoading) {
+    if (initialization.isLoading || settingsState is SettingsLoading) {
       return Scaffold(
         appBar: AppBar(title: const Text('Settings')),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
     
-    if (initialization.hasError || settingsAsync.hasError) {
+    if (initialization.hasError || settingsState is SettingsError) {
       return Scaffold(
         appBar: AppBar(title: const Text('Settings')),
         body: Center(
@@ -34,14 +34,16 @@ class SettingsScreen extends ConsumerWidget {
             children: [
               const Icon(Icons.error_outline, size: 64, color: Colors.red),
               const SizedBox(height: 16),
-              Text('Error: ${initialization.hasError ? initialization.error : settingsAsync.error}'),
+              Text('Error: ${initialization.hasError ? initialization.error : (settingsState as SettingsError).message}'),
             ],
           ),
         ),
       );
     }
     
-    final settings = settingsAsync.value ?? AppSettings.defaultSettings();
+    final settings = settingsState is SettingsLoaded 
+        ? settingsState.settings 
+        : AppSettings.defaultSettings();
     
     return _SettingsScreenContent(settings: settings);
   }
@@ -216,11 +218,17 @@ class _SettingsScreenContentState extends ConsumerState<_SettingsScreenContent> 
     setState(() {
       _settings = newSettings;
     });
-    final settingsService = ref.read(settingsServiceProvider);
-    await settingsService.updateSettings(newSettings);
+    // Update through the controller which will update state immediately
+    final controller = ref.read(settingsControllerProvider.notifier);
+    final success = await controller.updateSettings(newSettings);
     // Also update PreferencesService for backward compatibility
     if (PreferencesService.isInitialized) {
       await PreferencesService.updateSettings(newSettings);
+    }
+    if (success && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Settings updated')),
+      );
     }
   }
 
