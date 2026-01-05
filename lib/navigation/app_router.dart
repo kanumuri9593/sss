@@ -315,6 +315,14 @@ class DeepLinkHandler {
         } else if (uri.host == 'scan') {
           router.push('/scan');
           return;
+        } else if (uri.host == 'faq') {
+          final topic = uri.pathSegments.isNotEmpty ? uri.pathSegments.first : '';
+          if (topic.isNotEmpty) {
+            router.push('/faq/$topic');
+          } else {
+            router.push('/faq');
+          }
+          return;
         } else if (uri.host == 'containers' || uri.host == 'stats') {
           router.go('/');
           return;
