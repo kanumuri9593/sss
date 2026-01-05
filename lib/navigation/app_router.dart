@@ -12,6 +12,8 @@ import '../screens/qr_detail_screen.dart';
 import '../screens/nfc_detail_screen.dart';
 import '../screens/profile_screen.dart';
 import '../screens/settings_screen.dart';
+import '../screens/faq_list_screen.dart';
+import '../screens/faq_topic_screen.dart';
 import '../services/qr_service.dart';
 import '../services/nfc_service.dart';
 import '../services/siri_spotlight_service.dart';
@@ -157,6 +159,22 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/settings',
         name: 'settings',
         builder: (context, state) => const SettingsScreen(),
+      ),
+
+      // FAQ
+      GoRoute(
+        path: '/faq',
+        name: 'faq',
+        builder: (context, state) => const FAQListScreen(),
+      ),
+
+      GoRoute(
+        path: '/faq/:topic',
+        name: 'faq-topic',
+        builder: (context, state) {
+          final topic = state.pathParameters['topic']!;
+          return FAQTopicScreen(topic: topic);
+        },
       ),
     ],
   );
