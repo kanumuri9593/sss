@@ -12,7 +12,7 @@ import '../screens/qr_detail_screen.dart';
 import '../screens/nfc_detail_screen.dart';
 import '../screens/profile_screen.dart';
 import '../screens/settings_screen.dart';
-import '../screens/faq_list_screen.dart';
+import '../screens/faq_screen.dart';
 import '../screens/faq_topic_screen.dart';
 import '../services/qr_service.dart';
 import '../services/nfc_service.dart';
@@ -165,7 +165,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/faq',
         name: 'faq',
-        builder: (context, state) => const FAQListScreen(),
+        builder: (context, state) => const FAQScreen(),
       ),
 
       GoRoute(
@@ -173,7 +173,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: 'faq-topic',
         builder: (context, state) {
           final topic = state.pathParameters['topic']!;
-          return FAQTopicScreen(topic: topic);
+          return FAQTopicScreen(topicId: topic);
         },
       ),
     ],
