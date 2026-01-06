@@ -12,6 +12,8 @@ import '../screens/qr_detail_screen.dart';
 import '../screens/nfc_detail_screen.dart';
 import '../screens/profile_screen.dart';
 import '../screens/settings_screen.dart';
+import '../screens/faq_screen.dart';
+import '../screens/faq_topic_screen.dart';
 import '../services/qr_service.dart';
 import '../services/nfc_service.dart';
 import '../services/siri_spotlight_service.dart';
@@ -158,6 +160,22 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: 'settings',
         builder: (context, state) => const SettingsScreen(),
       ),
+
+      // FAQ
+      GoRoute(
+        path: '/faq',
+        name: 'faq',
+        builder: (context, state) => const FAQScreen(),
+      ),
+
+      GoRoute(
+        path: '/faq/:topic',
+        name: 'faq-topic',
+        builder: (context, state) {
+          final topic = state.pathParameters['topic']!;
+          return FAQTopicScreen(topicId: topic);
+        },
+      ),
     ],
   );
 });
@@ -296,6 +314,14 @@ class DeepLinkHandler {
           return;
         } else if (uri.host == 'scan') {
           router.push('/scan');
+          return;
+        } else if (uri.host == 'faq') {
+          final topic = uri.pathSegments.isNotEmpty ? uri.pathSegments.first : '';
+          if (topic.isNotEmpty) {
+            router.push('/faq/$topic');
+          } else {
+            router.push('/faq');
+          }
           return;
         } else if (uri.host == 'containers' || uri.host == 'stats') {
           router.go('/');

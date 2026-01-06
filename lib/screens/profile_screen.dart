@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:go_router/go_router.dart';
 import '../models/app_settings.dart';
 import '../services/preferences_service.dart';
 import '../services/storage_service.dart';
@@ -240,6 +241,26 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                 'Storage',
                                 'Required for saving and exporting data',
                                 Icons.folder_rounded,
+                              ),
+                            ],
+                          ),
+                        ),
+                        AppSpacing.verticalGapMD,
+
+                        // Help & Guides Section
+                        SpringSlide(
+                          beginOffset: const Offset(0, 30),
+                          delay: const Duration(milliseconds: 450),
+                          child: _buildGlassSection(
+                            context,
+                            title: 'Help & Guides',
+                            icon: Icons.help_outline_rounded,
+                            emoji: '📖',
+                            children: [
+                              _buildHelpTile(
+                                'FAQs & How-To Guides',
+                                'Get help with QR codes, NFC tags, and more',
+                                Icons.library_books_rounded,
                               ),
                             ],
                           ),
@@ -1021,6 +1042,27 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             );
           }
         }
+      },
+    );
+  }
+
+  // ========== Help & Guides ==========
+
+  Widget _buildHelpTile(
+    String title,
+    String description,
+    IconData icon,
+  ) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return ListTile(
+      leading: Icon(icon, color: colorScheme.primary),
+      title: Text(title),
+      subtitle: Text(description),
+      trailing: Icon(Icons.arrow_forward_ios, size: 16, color: colorScheme.primary),
+      onTap: () {
+        HapticFeedback.selectionClick();
+        context.push('/faq');
       },
     );
   }
