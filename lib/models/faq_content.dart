@@ -320,7 +320,11 @@ class FAQContent {
         description:
             'Tap the + button on the home screen to create a container. Give it a name and description, then start adding items.',
         icon: Icons.add_box_rounded,
-        action: FAQAction.navigate('Go to Home', '/'),
+        action: const FAQAction(
+          type: FAQActionType.navigate,
+          label: 'Go to Home',
+          route: '/',
+        ),
       ),
       FAQGuideStep(
         stepNumber: 3,
@@ -335,7 +339,11 @@ class FAQContent {
         description:
             'Use the search bar to find items across all containers. Search by name, tags, or description for instant results.',
         icon: Icons.search_rounded,
-        action: FAQAction.navigate('Open Search', '/search'),
+        action: const FAQAction(
+          type: FAQActionType.navigate,
+          label: 'Open Search',
+          route: '/search',
+        ),
       ),
     ],
   );
@@ -364,7 +372,11 @@ class FAQContent {
         description:
             'Tap the scan button on the home screen or use the camera permission to scan QR codes and instantly open the linked container.',
         icon: Icons.camera_alt_rounded,
-        action: FAQAction.navigate('Open Scanner', '/scan'),
+        action: const FAQAction(
+          type: FAQActionType.navigate,
+          label: 'Open Scanner',
+          route: '/scan',
+        ),
       ),
       FAQGuideStep(
         stepNumber: 4,
@@ -400,7 +412,10 @@ class FAQContent {
         description:
             'On Android, go to Settings > Connected Devices > Connection Preferences > NFC and turn it on. On iOS, NFC is always enabled.',
         icon: Icons.settings_rounded,
-        action: FAQAction.openNFCSettings('Open NFC Settings'),
+        action: const FAQAction(
+          type: FAQActionType.openNFCSettings,
+          label: 'Open NFC Settings',
+        ),
       ),
       FAQGuideStep(
         stepNumber: 4,
@@ -450,7 +465,10 @@ class FAQContent {
         description:
             'You can review and change app permissions anytime in your device settings. Tap below to open app settings.',
         icon: Icons.admin_panel_settings_rounded,
-        action: FAQAction.openAppSettings('Open App Settings'),
+        action: const FAQAction(
+          type: FAQActionType.openAppSettings,
+          label: 'Open App Settings',
+        ),
       ),
     ],
   );
@@ -465,7 +483,11 @@ class FAQContent {
         description:
             'Choose between light, dark, or system theme. The app adapts to your preference with beautiful glassmorphism design.',
         icon: Icons.palette_rounded,
-        action: FAQAction.navigate('Open Settings', '/profile'),
+        action: const FAQAction(
+          type: FAQActionType.navigate,
+          label: 'Open Settings',
+          route: '/profile',
+        ),
       ),
       FAQGuideStep(
         stepNumber: 2,
@@ -473,7 +495,11 @@ class FAQContent {
         description:
             'Configure AI tag suggestions, confidence threshold, and max tags per item. Choose between TensorFlow Lite or ML Kit.',
         icon: Icons.psychology_rounded,
-        action: FAQAction.navigate('Open Settings', '/profile'),
+        action: const FAQAction(
+          type: FAQActionType.navigate,
+          label: 'Open Settings',
+          route: '/profile',
+        ),
       ),
       FAQGuideStep(
         stepNumber: 3,
@@ -481,7 +507,11 @@ class FAQContent {
         description:
             'Set image cache size, choose default export paths, and manage storage usage. Clear cache to free up space.',
         icon: Icons.storage_rounded,
-        action: FAQAction.navigate('Open Settings', '/profile'),
+        action: const FAQAction(
+          type: FAQActionType.navigate,
+          label: 'Open Settings',
+          route: '/profile',
+        ),
       ),
       FAQGuideStep(
         stepNumber: 4,
@@ -489,7 +519,11 @@ class FAQContent {
         description:
             'Adjust font sizes for better readability. Choose from Small, Normal, Large, or Extra Large text scaling.',
         icon: Icons.accessibility_new_rounded,
-        action: FAQAction.navigate('Open Settings', '/profile'),
+        action: const FAQAction(
+          type: FAQActionType.navigate,
+          label: 'Open Settings',
+          route: '/profile',
+        ),
       ),
     ],
   );
