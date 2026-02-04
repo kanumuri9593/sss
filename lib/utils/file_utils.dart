@@ -24,13 +24,13 @@ class FileUtils {
     }
   }
 
-  /// Get the application documents directory
+  /// Get the application documents directory for stable persistent storage
+  ///
+  /// Uses getApplicationDocumentsDirectory() on both platforms to ensure
+  /// data persists across app relaunches and is not affected by external
+  /// storage volatility on Android.
   static Future<Directory> getDocumentsDirectory() async {
-    if (Platform.isAndroid) {
-      return await getExternalStorageDirectory() ?? await getApplicationDocumentsDirectory();
-    } else {
-      return await getApplicationDocumentsDirectory();
-    }
+    return await getApplicationDocumentsDirectory();
   }
 
   /// Get a file path in the downloads directory
