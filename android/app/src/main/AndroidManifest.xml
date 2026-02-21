@@ -92,6 +92,15 @@
                     android:scheme="sss"
                     android:host="faq" />
             </intent-filter>
+            <!-- Deep link intent filter for sss://nfc/<id> -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="sss"
+                    android:host="nfc" />
+            </intent-filter>
             <!-- App shortcuts and App Actions -->
             <meta-data
                 android:name="android.app.shortcuts"

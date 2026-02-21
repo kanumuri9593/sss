@@ -49,6 +49,8 @@ class _NFCTagManagementScreenState extends State<NFCTagManagementScreen>
   @override
   void dispose() {
     _tabController.dispose();
+    // Ensure any active NFC session is stopped when leaving this screen
+    NFCService.stopSession();
     super.dispose();
   }
 
@@ -751,6 +753,10 @@ class _NFCTagRegisterDialogState extends State<_NFCTagRegisterDialog> {
     _titleController.dispose();
     _descriptionController.dispose();
     _tagInputController.dispose();
+    // Stop any active NFC write session when dialog is dismissed
+    if (_isWriting) {
+      NFCService.stopSession();
+    }
     super.dispose();
   }
 
@@ -1200,6 +1206,10 @@ class _NFCTagEditScreenState extends State<_NFCTagEditScreen> {
     _titleController.dispose();
     _descriptionController.dispose();
     _tagInputController.dispose();
+    // Stop any active NFC session if rewriting was in progress
+    if (_isSaving && _rewriteTag) {
+      NFCService.stopSession();
+    }
     super.dispose();
   }
 

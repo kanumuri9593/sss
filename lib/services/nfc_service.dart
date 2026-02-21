@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'dart:async';
+import 'dart:convert';
 import 'package:nfc_manager/nfc_manager.dart';
 import 'package:nfc_manager/nfc_manager_android.dart';
 import 'package:nfc_manager/nfc_manager_ios.dart';
@@ -111,7 +112,7 @@ class NFCService {
         if (type[0] == 0x55) {
           final prefixCode = payload[0];
           final prefix = prefixCode < uriPrefixes.length ? uriPrefixes[prefixCode] : '';
-          final uriBody = String.fromCharCodes(payload.skip(1));
+          final uriBody = utf8.decode(Uint8List.fromList(payload.skip(1).toList()), allowMalformed: true);
           final fullUri = '$prefix$uriBody';
           debugPrint('[NFC] Decoded URI: $fullUri');
           return fullUri;
@@ -121,16 +122,16 @@ class NFCService {
         if (type[0] == 0x54) {
           final statusByte = payload[0];
           final languageCodeLength = statusByte & 0x3F;
-          final textBytes = payload.skip(1 + languageCodeLength);
-          final text = String.fromCharCodes(textBytes);
+          final textBytes = payload.skip(1 + languageCodeLength).toList();
+          final text = utf8.decode(Uint8List.fromList(textBytes), allowMalformed: true);
           debugPrint('[NFC] Decoded text: $text');
           return text;
         }
       }
 
-      // Try to decode as string
+      // Try to decode as UTF-8 string
       try {
-        final decoded = String.fromCharCodes(payload);
+        final decoded = utf8.decode(Uint8List.fromList(payload), allowMalformed: true);
         debugPrint('[NFC] Decoded as raw string: $decoded');
         return decoded;
       } catch (e) {
@@ -232,12 +233,13 @@ class NFCService {
       debugPrint('[NFC] Starting session with simplified polling...');
 
       await NfcManager.instance.startSession(
-        // Use just iso14443 - most common for NTAG tags
+        // Use both iso14443 and iso15693 for broad tag compatibility
         pollingOptions: {
           NfcPollingOption.iso14443,
+          NfcPollingOption.iso15693,
         },
         // iOS specific settings
-        alertMessageIos: 'Hold your iPhone near the NFC tag',
+        alertMessageIos: 'Hold your phone near the NFC tag',
         invalidateAfterFirstReadIos: true,
 
         // Error handler for iOS
@@ -374,9 +376,9 @@ class NFCService {
       // Wait for result with timeout
       final result = await completer.future.timeout(
         const Duration(seconds: 60),
-        onTimeout: () {
+        onTimeout: () async {
           debugPrint('[NFC] Session timeout');
-          stopSession(alertMessage: 'Session timed out');
+          await stopSession(alertMessage: 'Session timed out');
           return {'error': 'Session timed out'};
         },
       );
@@ -425,8 +427,9 @@ class NFCService {
           NfcPollingOption.iso14443,
           NfcPollingOption.iso15693,
         },
-        alertMessageIos: 'Hold your iPhone near the NFC tag to write',
-        invalidateAfterFirstReadIos: true,
+        alertMessageIos: 'Hold your phone near the NFC tag to write',
+        // Must be false for write sessions so the session stays alive for writing
+        invalidateAfterFirstReadIos: false,
 
         onSessionErrorIos: (error) {
           debugPrint('[NFC][iOS] Write session error: ${error.message}');
@@ -443,8 +446,9 @@ class NFCService {
             final actualTagId = extractTagId(tag);
             debugPrint('[NFC] Writing to tag: ${actualTagId ?? "unknown"}');
 
-            // Create NDEF message
-            final payload = Uint8List.fromList([0x00, ...data.codeUnits]);
+            // Create NDEF message with proper UTF-8 encoding
+            // 0x00 prefix = no abbreviation (URI includes full scheme)
+            final payload = Uint8List.fromList([0x00, ...utf8.encode(data)]);
             final record = NdefRecord(
               typeNameFormat: TypeNameFormat.wellKnown,
               type: Uint8List.fromList([0x55]), // URI record
@@ -511,9 +515,9 @@ class NFCService {
       // Wait for result with timeout
       final result = await completer.future.timeout(
         const Duration(seconds: 60),
-        onTimeout: () {
+        onTimeout: () async {
           debugPrint('[NFC] Write timeout');
-          stopSession(alertMessage: 'Write timeout');
+          await stopSession(alertMessage: 'Write timeout');
           return {'success': false, 'error': 'Write timeout'};
         },
       );
@@ -567,10 +571,14 @@ class NFCService {
     return nfcData.buildDeepLink();
   }
 
+  /// Verify if scanned data is from this system.
+  /// Checks both deep link format (sss://nfc/ or sss://qr/) and JSON system ID.
   static bool verifySystemNFC(String scannedData) {
+    // Check if it's a system deep link
     if (NFCTagData.isSystemDeepLink(scannedData)) {
       return true;
     }
+    // Also check JSON format for legacy compatibility
     return NFCTagData.verifySystemNFC(scannedData);
   }
 
@@ -604,12 +612,17 @@ class NFCService {
           sak = '0x${sakValue.toRadixString(16).padLeft(2, '0').toUpperCase()}';
 
           // Determine tag model from SAK
+          // SAK 0x00 = NTAG2xx family (cannot distinguish 213/215/216 by SAK alone)
+          // SAK 0x08 = MIFARE Classic 1K
+          // SAK 0x10 = MIFARE Classic 4K
           if (sakValue == 0x00) {
-            tagModel = 'NXP - NTAG213';
+            tagModel = 'NXP - NTAG2xx';
           } else if (sakValue == 0x08) {
-            tagModel = 'NXP - NTAG215';
+            tagModel = 'MIFARE Classic 1K';
           } else if (sakValue == 0x10) {
-            tagModel = 'NXP - NTAG216';
+            tagModel = 'MIFARE Classic 4K';
+          } else if (sakValue == 0x20) {
+            tagModel = 'MIFARE DESFire / NTAG I2C';
           } else {
             tagModel = 'ISO 14443 Type A';
           }

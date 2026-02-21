@@ -16,6 +16,7 @@ import '../screens/faq_screen.dart';
 import '../screens/faq_topic_screen.dart';
 import '../services/qr_service.dart';
 import '../services/nfc_service.dart';
+import '../services/nfc_tag_storage_service.dart';
 import '../services/siri_spotlight_service.dart';
 import '../presentation/providers/service_providers.dart';
 import '../presentation/providers/initialization_provider.dart';
@@ -296,7 +297,46 @@ class DeepLinkHandler {
               return;
             }
 
-            // Try NFC
+            // Try NFC (legacy: NFC tags may use sss://qr/ format)
+            final nfcData = NFCService.getNFCTagDataById(id);
+            if (nfcData != null) {
+              final nfcContainer = containerService.getContainerByNFCTag(id);
+              if (nfcContainer != null) {
+                router.push('/containers/${nfcContainer.id}');
+                return;
+              }
+              router.push('/nfc/$id');
+              return;
+            }
+
+            // Try persistent NFC storage as fallback
+            final storedTag = NFCTagStorageService.getTagById(id);
+            if (storedTag != null) {
+              if (storedTag.containerId != null) {
+                router.push('/containers/${storedTag.containerId}');
+                return;
+              }
+              router.push('/nfc/$id');
+              return;
+            }
+          }
+        } else if (uri.host == 'nfc') {
+          // Handle sss://nfc/<id> deep links from NFC tags
+          final id = uri.pathSegments.isNotEmpty ? uri.pathSegments.first : '';
+          if (id.isNotEmpty) {
+            final containerService = ref.read(containerServiceProvider);
+            // Check persistent NFC storage first
+            final storedTag = NFCTagStorageService.getTagById(id);
+            if (storedTag != null) {
+              if (storedTag.containerId != null) {
+                router.push('/containers/${storedTag.containerId}');
+                return;
+              }
+              router.push('/nfc/$id');
+              return;
+            }
+
+            // Try in-memory registry
             final nfcData = NFCService.getNFCTagDataById(id);
             if (nfcData != null) {
               final nfcContainer = containerService.getContainerByNFCTag(id);

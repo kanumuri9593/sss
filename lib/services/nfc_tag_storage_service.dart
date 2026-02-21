@@ -112,17 +112,23 @@ class NFCTagStorageService {
   static const String _boxName = 'nfc_tags';
   static Box<String>? _box;
 
-  /// Initialize the storage service
-  static Future<void> initialize() async {
+  /// Initialize the storage service.
+  /// Returns true if initialization was successful, false otherwise.
+  static Future<bool> initialize() async {
     try {
+      if (_box != null && _box!.isOpen) {
+        return true;
+      }
       if (!Hive.isBoxOpen(_boxName)) {
         _box = await Hive.openBox<String>(_boxName);
       } else {
         _box = Hive.box<String>(_boxName);
       }
       debugPrint('[NFCTagStorage] Initialized with ${_box?.length ?? 0} tags');
+      return true;
     } catch (e) {
       debugPrint('[NFCTagStorage] Error initializing: $e');
+      return false;
     }
   }
 
