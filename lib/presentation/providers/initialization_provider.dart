@@ -5,7 +5,8 @@ import '../../services/widget_service.dart';
 import '../../services/siri_spotlight_service.dart';
 import '../../services/google_assistant_service.dart';
 import '../../services/preferences_service.dart';
-import '../../services/permission_service.dart';
+import '../../services/storage_service.dart';
+import '../../services/nfc_tag_storage_service.dart';
 import 'data_providers.dart';
 import 'dart:io';
 
@@ -14,6 +15,15 @@ final initializationProvider = FutureProvider<void>((ref) async {
   // Initialize data source (this initializes Hive and opens boxes)
   final dataSource = ref.read(localStorageDataSourceProvider);
   await dataSource.initialize();
+
+  // Also initialize StorageService for backward compatibility with
+  // screens that use static ContainerService/ItemService directly
+  if (!StorageService.isInitialized) {
+    await StorageService.initialize();
+  }
+
+  // Initialize NFC tag persistent storage
+  await NFCTagStorageService.initialize();
 
   // Initialize PreferencesService (uses same Hive instance, syncs with data source)
   // This is needed for backward compatibility with code that still uses PreferencesService

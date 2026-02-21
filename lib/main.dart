@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'theme/app_theme.dart';
@@ -12,13 +14,31 @@ import 'services/google_assistant_service.dart';
 import 'navigation/app_router.dart';
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  runZonedGuarded(() async {
+    WidgetsFlutterBinding.ensureInitialized();
 
-  runApp(
-    const ProviderScope(
-      child: MyApp(),
-    ),
-  );
+    // Global error handler for Flutter framework errors
+    FlutterError.onError = (FlutterErrorDetails details) {
+      FlutterError.presentError(details);
+      debugPrint('[App] Flutter error: ${details.exception}');
+    };
+
+    // Global error handler for async errors not caught by Flutter
+    PlatformDispatcher.instance.onError = (error, stack) {
+      debugPrint('[App] Uncaught error: $error');
+      debugPrint('[App] Stack: $stack');
+      return true;
+    };
+
+    runApp(
+      const ProviderScope(
+        child: MyApp(),
+      ),
+    );
+  }, (error, stack) {
+    debugPrint('[App] Zone error: $error');
+    debugPrint('[App] Zone stack: $stack');
+  });
 }
 
 class MyApp extends ConsumerStatefulWidget {

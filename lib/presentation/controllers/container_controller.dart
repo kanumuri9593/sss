@@ -131,10 +131,11 @@ class ContainerController extends StateNotifier<ContainerState> {
   Container? getContainerById(String id) {
     if (state is ContainerLoaded) {
       final loadedState = state as ContainerLoaded;
-      return loadedState.containers.firstWhere(
-        (c) => c.id == id,
-        orElse: () => _service.getContainer(id)!,
-      );
+      try {
+        return loadedState.containers.firstWhere((c) => c.id == id);
+      } catch (_) {
+        // Not found in loaded state, fall through to service
+      }
     }
     return _service.getContainer(id);
   }
