@@ -47,6 +47,36 @@ class AppGradients {
     ],
   );
 
+  // ========== MODERN THEME GRADIENTS (NEW) ==========
+
+  static const Gradient modernPrimary = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [
+      Color(0xFF6366F1), // Indigo
+      Color(0xFF8B5CF6), // Violet
+      Color(0xFFEC4899), // Pink
+    ],
+  );
+
+  static const Gradient modernSecondary = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [
+      Color(0xFFEC4899), // Pink
+      Color(0xFFF43F5E), // Rose
+    ],
+  );
+
+  static const Gradient modernAccent = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [
+      Color(0xFFF59E0B), // Amber
+      Color(0xFFF97316), // Orange
+    ],
+  );
+
   // ========== DARK THEME GRADIENTS ==========
   // Vibrant purple/pink/magenta for energetic dark mode
 

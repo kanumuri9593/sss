@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../services/qr_service.dart';
 
 /// QR Scanner Screen for scanning QR codes
@@ -15,6 +16,36 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
   String? _scannedData;
   bool _isVerified = false;
   bool _isProcessing = false;
+  bool _hasPermission = false;
+  bool _isCheckingPermission = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAndRequestPermission();
+  }
+
+  Future<void> _checkAndRequestPermission() async {
+    final status = await Permission.camera.status;
+    if (status.isGranted) {
+      setState(() {
+        _hasPermission = true;
+        _isCheckingPermission = false;
+      });
+    } else if (status.isDenied) {
+      // Request permission
+      final result = await Permission.camera.request();
+      setState(() {
+        _hasPermission = result.isGranted;
+        _isCheckingPermission = false;
+      });
+    } else if (status.isPermanentlyDenied) {
+      setState(() {
+        _hasPermission = false;
+        _isCheckingPermission = false;
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -69,34 +100,91 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
         title: const Text('Scan QR Code'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
       ),
-      body: Column(
-        children: [
-          // Scanner view
-          Expanded(
-            flex: 3,
-            child: Stack(
-              children: [
-                MobileScanner(
-                  controller: _controller,
-                  onDetect: _handleScan,
-                ),
-                // Overlay with scanning area indicator
-                Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(
-                      color: Colors.white,
-                      width: 2,
+      body: _isCheckingPermission
+          ? const Center(child: CircularProgressIndicator())
+          : !_hasPermission
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.camera_alt_outlined,
+                          size: 64,
+                          color: Colors.grey,
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Camera Permission Required',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'This app needs camera access to scan QR codes.',
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 24),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            ElevatedButton.icon(
+                              onPressed: () async {
+                                final status = await Permission.camera.status;
+                                if (status.isPermanentlyDenied) {
+                                  await openAppSettings();
+                                } else {
+                                  await _checkAndRequestPermission();
+                                }
+                              },
+                              icon: const Icon(Icons.camera_alt),
+                              label: const Text('Grant Permission'),
+                            ),
+                            const SizedBox(width: 12),
+                            OutlinedButton.icon(
+                              onPressed: () async {
+                                await openAppSettings();
+                              },
+                              icon: const Icon(Icons.settings),
+                              label: const Text('Open Settings'),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
-                    borderRadius: BorderRadius.circular(20),
                   ),
-                  margin: const EdgeInsets.all(40),
-                ),
-              ],
-            ),
-          ),
+                )
+              : Column(
+                  children: [
+                    // Scanner view
+                    Expanded(
+                      flex: 3,
+                      child: Stack(
+                        children: [
+                          MobileScanner(
+                            controller: _controller,
+                            onDetect: _handleScan,
+                          ),
+                          // Overlay with scanning area indicator
+                          Container(
+                            decoration: BoxDecoration(
+                              border: Border.all(
+                                color: Colors.white,
+                                width: 2,
+                              ),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            margin: const EdgeInsets.all(40),
+                          ),
+                        ],
+                      ),
+                    ),
 
-          // Scanned data display
-          if (_scannedData != null)
+                    // Scanned data display
+                    if (_scannedData != null)
             Expanded(
               flex: 2,
               child: Container(

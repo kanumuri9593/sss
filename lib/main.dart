@@ -1,234 +1,190 @@
 import 'dart:async';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:uni_links/uni_links.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'theme/app_theme.dart';
-import 'screens/container_list_screen.dart';
-import 'screens/qr_detail_screen.dart';
-import 'screens/nfc_detail_screen.dart';
-import 'screens/container_detail_screen.dart';
-import 'services/qr_service.dart';
-import 'services/nfc_service.dart';
-import 'services/storage_service.dart';
-import 'services/container_service.dart';
-import 'services/image_recognition_service.dart';
+import 'theme/app_theme_mode.dart';
+import 'models/app_settings.dart';
+import 'presentation/controllers/settings_controller.dart';
+import 'presentation/states/settings_state.dart';
+import 'services/widget_service.dart';
+import 'services/siri_spotlight_service.dart';
+import 'services/google_assistant_service.dart';
+import 'navigation/app_router.dart';
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  
-  // Initialize storage
-  try {
-    await StorageService.initialize();
-    debugPrint('[main] Storage initialized');
-  } catch (e) {
-    debugPrint('[main] Error initializing storage: $e');
-  }
+  runZonedGuarded(() async {
+    WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize image recognition
-  await ImageRecognitionService.initialize();
+    // Global error handler for Flutter framework errors
+    FlutterError.onError = (FlutterErrorDetails details) {
+      FlutterError.presentError(details);
+      debugPrint('[App] Flutter error: ${details.exception}');
+    };
 
-  runApp(const MyApp());
+    // Global error handler for async errors not caught by Flutter
+    PlatformDispatcher.instance.onError = (error, stack) {
+      debugPrint('[App] Uncaught error: $error');
+      debugPrint('[App] Stack: $stack');
+      return true;
+    };
+
+    runApp(
+      const ProviderScope(
+        child: MyApp(),
+      ),
+    );
+  }, (error, stack) {
+    debugPrint('[App] Zone error: $error');
+    debugPrint('[App] Zone stack: $stack');
+  });
 }
 
-class MyApp extends StatefulWidget {
+class MyApp extends ConsumerStatefulWidget {
   const MyApp({super.key});
 
   @override
-  State<MyApp> createState() => _MyAppState();
+  ConsumerState<MyApp> createState() => _MyAppState();
 }
 
-class _MyAppState extends State<MyApp> {
-  StreamSubscription? _linkSubscription;
-
+class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
-    _initDeepLinks();
+    WidgetsBinding.instance.addObserver(this);
+    _initWidgetClickHandler();
+    _checkInitialWidgetLaunch();
   }
 
-  void _initDeepLinks() {
-    // Handle initial link (app opened via deep link)
-    getInitialLink().then((String? initialLink) {
-      if (initialLink != null) {
-        _handleDeepLink(initialLink);
+  /// Initialize widget click handler for home screen widget interactions
+  void _initWidgetClickHandler() {
+    WidgetService.registerClickHandler((uri) {
+      if (uri != null) {
+        DeepLinkHandler.handleDeepLink(ref, uri.toString());
       }
     });
-
-    // Listen for deep links while app is running
-    _linkSubscription = linkStream.listen(
-      (String? link) {
-        if (link != null) {
-          _handleDeepLink(link);
-        }
-      },
-      onError: (err) {
-        debugPrint('Deep link error: $err');
-      },
-    );
   }
 
-  void _handleDeepLink(String link) {
-    debugPrint('Received deep link: $link');
-    final uri = Uri.parse(link);
-    
-    if (uri.scheme == 'sss') {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          if (uri.host == 'container') {
-            // Handle container deep link: sss://container/<id>
-            final containerId = uri.pathSegments.isNotEmpty ? uri.pathSegments.first : '';
-            if (containerId.isNotEmpty) {
-              final container = ContainerService.getContainer(containerId);
-              if (container != null) {
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(
-                    builder: (context) => ContainerDetailScreen(containerId: containerId),
-                  ),
-                );
-                return;
-              }
-            }
-          } else if (uri.host == 'qr') {
-            // Handle QR/NFC deep link: sss://qr/<id>
-            final id = uri.pathSegments.isNotEmpty ? uri.pathSegments.first : '';
-            if (id.isNotEmpty) {
-              // Check if it's linked to a container
-              final container = ContainerService.getContainerByQRCode(id);
-              if (container != null) {
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(
-                    builder: (context) => ContainerDetailScreen(containerId: container.id),
-                  ),
-                );
-                return;
-              }
-
-              // Check if it's a QR code or NFC tag
-              final qrData = QRService.getQRDataById(id);
-              if (qrData != null) {
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(
-                    builder: (context) => QRDetailScreen(qrId: id),
-                  ),
-                );
-                return;
-              }
-
-              // Try NFC
-              final nfcData = NFCService.getNFCTagDataById(id);
-              if (nfcData != null) {
-                // Check if NFC is linked to a container
-                final nfcContainer = ContainerService.getContainerByNFCTag(id);
-                if (nfcContainer != null) {
-                  Navigator.of(context).pushReplacement(
-                    MaterialPageRoute(
-                      builder: (context) => ContainerDetailScreen(containerId: nfcContainer.id),
-                    ),
-                  );
-                  return;
-                }
-
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(
-                    builder: (context) => NFCDetailScreen(nfcId: id),
-                  ),
-                );
-                return;
-              }
-            }
-          }
-
-          // Not found, show error
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (context) => Scaffold(
-                appBar: AppBar(
-                  title: const Text('Not Found'),
-                ),
-                body: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.error_outline, size: 64, color: Colors.red),
-                      const SizedBox(height: 16),
-                      const Text('Item not found'),
-                      const SizedBox(height: 24),
-                      ElevatedButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('Go Back'),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          );
-        }
-      });
+  /// Check if app was launched from a home screen widget
+  Future<void> _checkInitialWidgetLaunch() async {
+    final uri = await WidgetService.getInitialUri();
+    if (uri != null) {
+      // Small delay to ensure app is fully initialized
+      await Future.delayed(const Duration(milliseconds: 500));
+      DeepLinkHandler.handleDeepLink(ref, uri.toString());
     }
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    
+    // Update widgets when app goes to background or resumes
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.resumed) {
+      _updateNativeIntegrations();
+    }
+  }
+
+  /// Update all native integrations (widgets, Spotlight, shortcuts)
+  Future<void> _updateNativeIntegrations() async {
+    try {
+      // Update home screen widgets
+      await WidgetService.updateAllWidgets();
+
+      // Update platform-specific integrations
+      if (Platform.isIOS) {
+        await SiriSpotlightService.indexAllContent();
+      } else if (Platform.isAndroid) {
+        await GoogleAssistantService.updateAppActions();
+      }
+
+      debugPrint('[main] Native integrations updated');
+    } catch (e) {
+      debugPrint('[main] Error updating native integrations: $e');
+    }
+  }
+
+
+  @override
   void dispose() {
-    _linkSubscription?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'SSS - Search & Scan',
-      theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
-      themeMode: ThemeMode.system,
-      home: const ContainerListScreen(),
-      onGenerateRoute: (settings) {
-        // Handle deep link routes
-        if (settings.name?.startsWith('sss://') ?? false) {
-          final uri = Uri.parse(settings.name!);
-          
-          if (uri.host == 'container') {
-            final containerId = uri.pathSegments.isNotEmpty ? uri.pathSegments.first : '';
-            if (containerId.isNotEmpty) {
-              return MaterialPageRoute(
-                builder: (context) => ContainerDetailScreen(containerId: containerId),
-              );
-            }
-          } else if (uri.host == 'qr') {
-            final id = uri.pathSegments.isNotEmpty ? uri.pathSegments.first : '';
-            if (id.isNotEmpty) {
-              // Check if linked to container
-              final container = ContainerService.getContainerByQRCode(id);
-              if (container != null) {
-                return MaterialPageRoute(
-                  builder: (context) => ContainerDetailScreen(containerId: container.id),
-                );
-              }
+    // Watch router
+    final router = ref.watch(routerProvider);
+    
+    // Watch settings controller for reactive theme updates
+    final settingsState = ref.watch(settingsControllerProvider);
+    final settings = settingsState is SettingsLoaded 
+        ? settingsState.settings 
+        : AppSettings.defaultSettings();
+    final themeMode = settings.themeMode;
+    final fontScale = settings.fontScale.scale;
+    final useDynamicType = settings.useDynamicType;
 
-              // Try QR first, then NFC
-              final qrData = QRService.getQRDataById(id);
-              if (qrData != null) {
-                return MaterialPageRoute(
-                  builder: (context) => QRDetailScreen(qrId: id),
-                );
-              } else {
-                final nfcData = NFCService.getNFCTagDataById(id);
-                if (nfcData != null) {
-                  final nfcContainer = ContainerService.getContainerByNFCTag(id);
-                  if (nfcContainer != null) {
-                    return MaterialPageRoute(
-                      builder: (context) => ContainerDetailScreen(containerId: nfcContainer.id),
-                    );
-                  }
-                  return MaterialPageRoute(
-                    builder: (context) => NFCDetailScreen(nfcId: id),
-                  );
-                }
-              }
-            }
-          }
-        }
-        return null;
-      },
+    // Build the appropriate theme
+    final brightness = MediaQuery.platformBrightnessOf(context);
+    final theme = AppTheme.buildTheme(
+      themeMode: themeMode,
+      systemBrightness: brightness,
     );
+
+    // Apply font scaling if not using dynamic type
+    final textScaler = useDynamicType
+        ? MediaQuery.textScalerOf(context)
+        : TextScaler.linear(fontScale);
+
+    // Determine which theme to use based on the selected theme mode
+    final flutterThemeMode = _getThemeMode(themeMode);
+    final isCustomLightTheme = themeMode == AppThemeMode.retro ||
+                               themeMode == AppThemeMode.highContrast ||
+                               themeMode == AppThemeMode.oceanBlue ||
+                               themeMode == AppThemeMode.forestGreen ||
+                               themeMode == AppThemeMode.sunsetOrange;
+    final isCustomDarkTheme = themeMode == AppThemeMode.modern;
+    
+    return MediaQuery(
+      data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+      child: MaterialApp.router(
+        title: 'SSS - Search & Scan',
+        theme: isCustomLightTheme
+            ? theme // Use custom light theme
+            : AppTheme.buildTheme(
+                themeMode: AppThemeMode.light,
+                systemBrightness: Brightness.light,
+              ),
+        darkTheme: isCustomDarkTheme
+            ? theme // Use custom dark theme (modern)
+            : AppTheme.buildTheme(
+                themeMode: AppThemeMode.dark,
+                systemBrightness: Brightness.dark,
+              ),
+        themeMode: flutterThemeMode,
+        routerConfig: router,
+        debugShowCheckedModeBanner: false,
+      ),
+    );
+  }
+
+  /// Convert AppThemeMode to Flutter's ThemeMode
+  ThemeMode _getThemeMode(AppThemeMode mode) {
+    switch (mode) {
+      case AppThemeMode.light:
+      case AppThemeMode.retro:
+      case AppThemeMode.highContrast:
+      case AppThemeMode.oceanBlue:
+      case AppThemeMode.forestGreen:
+      case AppThemeMode.sunsetOrange:
+        return ThemeMode.light;
+      case AppThemeMode.dark:
+      case AppThemeMode.modern: // Modern theme uses dark colors
+        return ThemeMode.dark;
+      case AppThemeMode.system:
+        return ThemeMode.system;
+    }
   }
 }

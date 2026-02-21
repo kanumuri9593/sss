@@ -83,8 +83,10 @@ class AppTheme {
         return _buildForestGreenTheme();
       case AppThemeMode.sunsetOrange:
         return _buildSunsetOrangeTheme();
+      case AppThemeMode.modern:
+        return _buildModernTheme();
       default:
-        return _buildLightTheme();
+        return _buildModernTheme(); // Default to modern now
     }
   }
 
@@ -439,6 +441,53 @@ class AppTheme {
     );
 
     return _buildBaseTheme(colorScheme, themeExtension, const Color(0xFFFFF7ED));
+  }
+
+  // ========== MODERN THEME (NEW) ==========
+
+  static ThemeData _buildModernTheme() {
+    final colorScheme = ColorScheme.dark(
+      primary: AppColors.modernPrimary,
+      onPrimary: Colors.white,
+      primaryContainer: const Color(0xFF4338CA), // Indigo 700
+      onPrimaryContainer: const Color(0xFFE0E7FF), // Indigo 100
+
+      secondary: AppColors.modernSecondary,
+      onSecondary: Colors.white,
+      secondaryContainer: const Color(0xFFBE185D), // Pink 700
+      onSecondaryContainer: const Color(0xFFFCE7F3), // Pink 100
+
+      tertiary: AppColors.modernAccent,
+      onTertiary: Colors.white,
+      tertiaryContainer: const Color(0xFF7C3AED), // Violet 600
+      onTertiaryContainer: const Color(0xFFEDE9FE), // Violet 100
+
+      error: AppColors.error,
+      onError: Colors.white,
+
+      surface: AppColors.modernSurface,
+      onSurface: AppColors.modernOnSurface,
+      surfaceContainerHighest: const Color(0xFF334155), // Slate 700
+      onSurfaceVariant: const Color(0xFF94A3B8), // Slate 400
+
+      outline: const Color(0xFF475569), // Slate 600
+      shadow: Colors.black.withValues(alpha: 0.5),
+    );
+
+    final themeExtension = AppThemeExtension(
+      primaryGradient: AppGradients.modernPrimary,
+      secondaryGradient: AppGradients.modernSecondary,
+      accentGradient: AppGradients.modernAccent,
+      backgroundGradient: AppGradients.backgroundGradient(
+        AppColors.modernPrimary,
+        0.15,
+      ),
+      surfaceGradient: AppGradients.glassMorphism,
+      cardShadow: AppShadows.xl,
+      elevatedShadow: AppShadows.xl,
+    );
+
+    return _buildBaseTheme(colorScheme, themeExtension, AppColors.modernBackground);
   }
 
   // ========== BASE THEME BUILDER ==========

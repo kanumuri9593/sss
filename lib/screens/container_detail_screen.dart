@@ -8,8 +8,12 @@ import '../models/qr_data.dart';
 import '../services/container_service.dart';
 import '../services/item_service.dart';
 import '../services/qr_service.dart';
+import '../services/nfc_tag_storage_service.dart';
+import '../widgets/animated_fab.dart';
+import '../widgets/glass_components.dart';
 import 'item_create_screen.dart';
 import 'container_create_screen.dart';
+import 'nfc_tag_management_screen.dart';
 
 /// Container Detail Screen
 ///
@@ -17,10 +21,7 @@ import 'container_create_screen.dart';
 class ContainerDetailScreen extends StatefulWidget {
   final String containerId;
 
-  const ContainerDetailScreen({
-    super.key,
-    required this.containerId,
-  });
+  const ContainerDetailScreen({super.key, required this.containerId});
 
   @override
   State<ContainerDetailScreen> createState() => _ContainerDetailScreenState();
@@ -34,8 +35,8 @@ class _ContainerDetailScreenState extends State<ContainerDetailScreen> {
   final TextEditingController _searchController = TextEditingController();
   List<Item> _filteredItems = [];
   Timer? _searchDebounceTimer;
-  Map<String, List<Item>> _itemGroups = {}; // Group name -> items
-  List<String> _groupOrder = []; // Order of groups
+  final Map<String, List<Item>> _itemGroups = {}; // Group name -> items
+  final List<String> _groupOrder = []; // Order of groups
 
   @override
   void initState() {
@@ -59,7 +60,9 @@ class _ContainerDetailScreenState extends State<ContainerDetailScreen> {
     final container = ContainerService.getContainer(widget.containerId);
     if (container != null) {
       final items = ItemService.getItemsByContainer(widget.containerId);
-      final childContainers = ContainerService.getChildContainers(widget.containerId);
+      final childContainers = ContainerService.getChildContainers(
+        widget.containerId,
+      );
 
       // Organize items into groups
       _organizeItemsIntoGroups(items);
@@ -76,9 +79,9 @@ class _ContainerDetailScreenState extends State<ContainerDetailScreen> {
         _isLoading = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Container not found')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Container not found')));
         Navigator.of(context).pop();
       }
     }
@@ -87,7 +90,7 @@ class _ContainerDetailScreenState extends State<ContainerDetailScreen> {
   void _organizeItemsIntoGroups(List<Item> items) {
     _itemGroups.clear();
     _groupOrder.clear();
-    
+
     // For now, use a simple "Ungrouped" group
     // In the future, items could have a groupId field
     _itemGroups['Ungrouped'] = List.from(items);
@@ -100,12 +103,17 @@ class _ContainerDetailScreenState extends State<ContainerDetailScreen> {
     _searchDebounceTimer?.cancel();
     _searchDebounceTimer = Timer(const Duration(milliseconds: 300), () {
       if (!mounted) return;
-      if (_searchController.text != query) return; // Query changed, ignore this update
+      if (_searchController.text != query) {
+        return; // Query changed, ignore this update
+      }
       setState(() {
         if (query.isEmpty) {
           _filteredItems = _items;
         } else {
-          _filteredItems = ItemService.searchItemsInContainer(widget.containerId, query);
+          _filteredItems = ItemService.searchItemsInContainer(
+            widget.containerId,
+            query,
+          );
         }
         _organizeItemsIntoGroups(_filteredItems);
       });
@@ -139,10 +147,8 @@ class _ContainerDetailScreenState extends State<ContainerDetailScreen> {
   Future<void> _editItem(Item item) async {
     final result = await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => ItemCreateScreen(
-          containerId: widget.containerId,
-          item: item,
-        ),
+        builder: (context) =>
+            ItemCreateScreen(containerId: widget.containerId, item: item),
       ),
     );
     if (result == true) {
@@ -175,14 +181,14 @@ class _ContainerDetailScreenState extends State<ContainerDetailScreen> {
     if (confirmed == true) {
       final success = await ItemService.deleteItem(item.id);
       if (success && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Item deleted')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Item deleted')));
         _loadContainer();
       } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to delete item')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Failed to delete item')));
       }
     }
   }
@@ -228,7 +234,11 @@ class _ContainerDetailScreenState extends State<ContainerDetailScreen> {
     }
   }
 
-  Future<void> _reorderItems(int oldIndex, int newIndex, String groupName) async {
+  Future<void> _reorderItems(
+    int oldIndex,
+    int newIndex,
+    String groupName,
+  ) async {
     if (oldIndex < newIndex) {
       newIndex -= 1;
     }
@@ -250,18 +260,14 @@ class _ContainerDetailScreenState extends State<ContainerDetailScreen> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return Scaffold(
-        appBar: AppBar(
-          title: const Text('Container'),
-        ),
+        appBar: AppBar(title: const Text('Container')),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
 
     if (_container == null) {
       return Scaffold(
-        appBar: AppBar(
-          title: const Text('Container'),
-        ),
+        appBar: AppBar(title: const Text('Container')),
         body: const Center(child: Text('Container not found')),
       );
     }
@@ -274,6 +280,14 @@ class _ContainerDetailScreenState extends State<ContainerDetailScreen> {
             icon: const Icon(Icons.qr_code),
             onPressed: _showQRCode,
             tooltip: 'View QR Code',
+          ),
+          IconButton(
+            icon: Icon(
+              Icons.nfc,
+              color: _container!.nfcTagId != null ? Colors.green : null,
+            ),
+            onPressed: _showNFCOptions,
+            tooltip: 'Manage NFC Tag',
           ),
           IconButton(
             icon: const Icon(Icons.edit),
@@ -306,7 +320,9 @@ class _ContainerDetailScreenState extends State<ContainerDetailScreen> {
                       errorBuilder: (context, error, stackTrace) {
                         return Container(
                           height: 200,
-                          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.surfaceContainerHighest,
                           child: Center(
                             child: Text(
                               _container!.typeIcon,
@@ -342,8 +358,8 @@ class _ContainerDetailScreenState extends State<ContainerDetailScreen> {
                       Text(
                         _container!.typeDisplayName,
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: Theme.of(context).colorScheme.onSurfaceVariant,
-                            ),
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                       ),
                       if (_container!.description != null) ...[
                         const SizedBox(height: 8),
@@ -412,21 +428,27 @@ class _ContainerDetailScreenState extends State<ContainerDetailScreen> {
                             width: 200,
                             child: Card(
                               child: ListTile(
-                                leading: Text(child.typeIcon, style: const TextStyle(fontSize: 24)),
+                                leading: Text(
+                                  child.typeIcon,
+                                  style: const TextStyle(fontSize: 24),
+                                ),
                                 title: Text(child.name),
                                 subtitle: Text(child.typeDisplayName),
                                 onTap: () {
-                                  Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (context) => ContainerDetailScreen(
-                                        containerId: child.id,
-                                      ),
-                                    ),
-                                  ).then((result) {
-                                    if (result == true) {
-                                      _loadContainer();
-                                    }
-                                  });
+                                  Navigator.of(context)
+                                      .push(
+                                        MaterialPageRoute(
+                                          builder: (context) =>
+                                              ContainerDetailScreen(
+                                                containerId: child.id,
+                                              ),
+                                        ),
+                                      )
+                                      .then((result) {
+                                        if (result == true) {
+                                          _loadContainer();
+                                        }
+                                      });
                                 },
                               ),
                             ),
@@ -478,16 +500,31 @@ class _ContainerDetailScreenState extends State<ContainerDetailScreen> {
                           ? 'No items yet'
                           : 'No items found',
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          ),
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                     ),
                     if (_searchController.text.isEmpty) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        'Tap + to add an item',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      const SizedBox(height: 24),
+                      GlassButton(
+                        onPressed: _addItem,
+                        glowColor: Theme.of(context).colorScheme.primary,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.add_rounded,
+                              color: Theme.of(context).colorScheme.primary,
                             ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Add Item',
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.primary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ],
@@ -500,7 +537,7 @@ class _ContainerDetailScreenState extends State<ContainerDetailScreen> {
               if (groupItems.isEmpty && groupName != 'Ungrouped') {
                 return const SliverToBoxAdapter(child: SizedBox.shrink());
               }
-              
+
               return SliverMainAxisGroup(
                 slivers: [
                   // Group Header
@@ -511,15 +548,17 @@ class _ContainerDetailScreenState extends State<ContainerDetailScreen> {
                         children: [
                           Text(
                             groupName,
-                            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                ),
+                            style: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(fontWeight: FontWeight.bold),
                           ),
                           const SizedBox(width: 8),
                           Text(
                             '(${groupItems.length})',
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
                                 ),
                           ),
                         ],
@@ -544,7 +583,9 @@ class _ContainerDetailScreenState extends State<ContainerDetailScreen> {
                             child: ListTile(
                               leading: item.imagePaths.isNotEmpty
                                   ? CircleAvatar(
-                                      backgroundImage: FileImage(File(item.imagePaths.first)),
+                                      backgroundImage: FileImage(
+                                        File(item.imagePaths.first),
+                                      ),
                                       onBackgroundImageError: (_, __) {},
                                     )
                                   : CircleAvatar(
@@ -574,7 +615,6 @@ class _ContainerDetailScreenState extends State<ContainerDetailScreen> {
                                     onPressed: () => _deleteItem(item),
                                     tooltip: 'Delete item',
                                   ),
-                                  const Icon(Icons.drag_handle),
                                 ],
                               ),
                               onTap: () => _editItem(item),
@@ -586,15 +626,200 @@ class _ContainerDetailScreenState extends State<ContainerDetailScreen> {
                   ),
                 ],
               );
-            }).toList(),
+            }),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _addItem,
-        child: const Icon(Icons.add),
-        tooltip: 'Add item',
+      floatingActionButton: _filteredItems.isNotEmpty
+          ? AnimatedFAB(
+              onPressed: _addItem,
+              tooltip: 'Add item',
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              foregroundColor: Theme.of(context).colorScheme.onPrimary,
+            )
+          : null,
+    );
+  }
+
+  Future<void> _showNFCOptions() async {
+    if (_container == null) return;
+
+    final hasNFCTag = _container!.nfcTagId != null;
+    NFCTagStoredRegistration? linkedTag;
+
+    if (hasNFCTag) {
+      await NFCTagStorageService.initialize();
+      linkedTag = NFCTagStorageService.getTagByPhysicalId(
+        _container!.nfcTagId!,
+      );
+    }
+
+    if (!mounted) return;
+
+    await showModalBottomSheet(
+      context: context,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  backgroundColor: hasNFCTag ? Colors.green : Colors.grey,
+                  child: const Icon(Icons.nfc, color: Colors.white),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        hasNFCTag ? 'NFC Tag Linked' : 'No NFC Tag',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      if (hasNFCTag && linkedTag != null)
+                        Text(
+                          linkedTag.title,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            if (hasNFCTag) ...[
+              ListTile(
+                leading: const Icon(Icons.info_outline),
+                title: const Text('View Tag Details'),
+                onTap: () {
+                  Navigator.pop(context);
+                  if (linkedTag != null) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            NFCTagManagementScreen(containerId: _container!.id),
+                      ),
+                    );
+                  }
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.swap_horiz),
+                title: const Text('Change NFC Tag'),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _linkNewNFCTag();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.link_off, color: Colors.red),
+                title: const Text(
+                  'Unlink NFC Tag',
+                  style: TextStyle(color: Colors.red),
+                ),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _unlinkNFCTag();
+                },
+              ),
+            ] else ...[
+              ListTile(
+                leading: const Icon(Icons.add),
+                title: const Text('Register & Link NFC Tag'),
+                subtitle: const Text('Create a new NFC tag for this container'),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _linkNewNFCTag();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.nfc),
+                title: const Text('Manage All NFC Tags'),
+                subtitle: const Text('View all registered NFC tags'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const NFCTagManagementScreen(),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ],
+        ),
       ),
     );
+  }
+
+  Future<void> _linkNewNFCTag() async {
+    if (_container == null) return;
+
+    final result = await Navigator.push<NFCTagStoredRegistration?>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => NFCTagManagementScreen(
+          containerId: _container!.id,
+          returnOnSuccess: true,
+        ),
+      ),
+    );
+
+    if (result != null) {
+      // Reload container to get updated NFC tag ID
+      _loadContainer();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('NFC tag linked successfully!')),
+        );
+      }
+    }
+  }
+
+  Future<void> _unlinkNFCTag() async {
+    if (_container == null || _container!.nfcTagId == null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Unlink NFC Tag'),
+        content: const Text('Remove the NFC tag link from this container?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Unlink'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      // Find and unlink the stored tag
+      await NFCTagStorageService.initialize();
+      final storedTag = NFCTagStorageService.getTagByPhysicalId(
+        _container!.nfcTagId!,
+      );
+      if (storedTag != null) {
+        await NFCTagStorageService.unlinkTagFromContainer(storedTag.id);
+      }
+
+      await ContainerService.unlinkNFCTag(_container!.id);
+      _loadContainer();
+
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('NFC tag unlinked')));
+      }
+    }
   }
 
   Future<void> _showQRCode() async {
@@ -689,11 +914,13 @@ class _ContainerDetailScreenState extends State<ContainerDetailScreen> {
     );
 
     if (confirmed == true) {
-      final success = await ContainerService.deleteContainer(widget.containerId);
+      final success = await ContainerService.deleteContainer(
+        widget.containerId,
+      );
       if (success && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Container deleted')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Container deleted')));
         Navigator.of(context).pop(true);
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -774,9 +1001,11 @@ class _QRCodeDialogState extends State<_QRCodeDialog> {
     _qrDeepLink = QRService.generateDeepLink(
       data: deepLink,
       category: 'Container',
-      customIdentifier: _qrCustomIdentifier.isEmpty ? null : _qrCustomIdentifier,
+      customIdentifier: _qrCustomIdentifier.isEmpty
+          ? null
+          : _qrCustomIdentifier,
     );
-    
+
     final qrId = QRData.extractIdFromDeepLink(_qrDeepLink);
     if (qrId != null) {
       ContainerService.linkQRCode(widget.container.id, qrId);
@@ -800,16 +1029,17 @@ class _QRCodeDialogState extends State<_QRCodeDialog> {
         return;
       }
 
-      final fileName = 'container_${widget.container.name}_qr_${DateTime.now().millisecondsSinceEpoch}.png';
+      final fileName =
+          'container_${widget.container.name}_qr_${DateTime.now().millisecondsSinceEpoch}.png';
       final filePath = await QRService.exportAsPNG(
         imageBytes: imageBytes,
         fileName: fileName,
       );
 
       if (filePath != null && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('QR code saved to $filePath')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('QR code saved to $filePath')));
       }
     } catch (e) {
       if (mounted) {
@@ -851,9 +1081,9 @@ class _QRCodeDialogState extends State<_QRCodeDialog> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error sharing QR code: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error sharing QR code: $e')));
       }
     }
   }
@@ -866,11 +1096,11 @@ class _QRCodeDialogState extends State<_QRCodeDialog> {
       foregroundColor: _qrForegroundColor,
       errorCorrectionLevel: QrErrorCorrectLevel.M,
     );
-    
+
     if (_qrCustomIdentifier.isEmpty) {
       return qrWidget;
     }
-    
+
     return Stack(
       alignment: Alignment.center,
       children: [
@@ -886,7 +1116,9 @@ class _QRCodeDialogState extends State<_QRCodeDialog> {
             child: Text(
               _qrCustomIdentifier,
               style: TextStyle(
-                fontSize: _qrCustomIdentifier.length > 1 ? size * 0.15 : size * 0.12,
+                fontSize: _qrCustomIdentifier.length > 1
+                    ? size * 0.15
+                    : size * 0.12,
                 fontWeight: FontWeight.bold,
                 color: _qrIdentifierColor,
               ),
@@ -900,7 +1132,7 @@ class _QRCodeDialogState extends State<_QRCodeDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    
+
     return Dialog(
       child: Container(
         padding: const EdgeInsets.all(24),
@@ -992,7 +1224,9 @@ class _QREditDialogState extends State<_QREditDialog> {
   @override
   void initState() {
     super.initState();
-    _identifierController = TextEditingController(text: widget.customIdentifier);
+    _identifierController = TextEditingController(
+      text: widget.customIdentifier,
+    );
     _foregroundColor = widget.foregroundColor;
     _backgroundColor = widget.backgroundColor;
     _identifierColor = widget.identifierColor;
@@ -1084,10 +1318,7 @@ class _ColorPickerButton extends StatelessWidget {
   final Color color;
   final ValueChanged<Color> onColorChanged;
 
-  const _ColorPickerButton({
-    required this.color,
-    required this.onColorChanged,
-  });
+  const _ColorPickerButton({required this.color, required this.onColorChanged});
 
   @override
   Widget build(BuildContext context) {

@@ -48,7 +48,7 @@
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>This app needs access to save QR code images to your photo library.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>This app needs access to save QR code images.</string>
+	<string>This app needs access to your photos to add images to containers and items for smart storage management.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UIFileSharingEnabled</key>
@@ -67,6 +67,16 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 		<string>UIInterfaceOrientationPortrait</string>
 		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+	</array>
+	<key>NSSiriUsageDescription</key>
+	<string>SSS uses Siri to help you quickly search and access your containers using voice commands.</string>
+	<key>NSUserActivityTypes</key>
+	<array>
+		<string>com.example.sss.searchContainers</string>
+		<string>com.example.sss.viewContainer</string>
+		<string>com.example.sss.addItem</string>
+		<string>com.example.sss.scanQR</string>
+		<string>com.example.sss.scanNFC</string>
 	</array>
 </dict>
 </plist>

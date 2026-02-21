@@ -170,72 +170,93 @@ class ContainerService {
   }
 
   /// Search containers by name, tags, or linked QR/NFC
-  static List<Container> searchContainers(String query) {
+  static Future<List<Container>> searchContainers(String query) async {
     if (query.isEmpty) {
       return getAllContainers();
     }
 
     try {
       final box = StorageService.containersBox;
-      final lowerQuery = query.toLowerCase();
+      final containers = box.values.toList();
       
-      return box.values.where((container) {
-        // Search by name
-        if (container.name.toLowerCase().contains(lowerQuery)) {
-          return true;
-        }
-
-        // Search by description
-        if (container.description != null &&
-            container.description!.toLowerCase().contains(lowerQuery)) {
-          return true;
-        }
-
-        // Search by tags
-        for (final tag in container.tags) {
-          if (tag.toLowerCase().contains(lowerQuery)) {
-            return true;
-          }
-        }
-
-        // Search by QR code ID
-        if (container.qrCodeId != null &&
-            container.qrCodeId!.toLowerCase().contains(lowerQuery)) {
-          return true;
-        }
-
-        // Search by NFC tag ID
-        if (container.nfcTagId != null &&
-            container.nfcTagId!.toLowerCase().contains(lowerQuery)) {
-          return true;
-        }
-
-        return false;
-      }).toList();
+      return await compute(_filterContainers, {
+        'containers': containers,
+        'query': query,
+      });
     } catch (e) {
       debugPrint('[ContainerService] Error searching containers: $e');
       return [];
     }
   }
 
+  static List<Container> _filterContainers(Map<String, dynamic> params) {
+    final containers = params['containers'] as List<Container>;
+    final lowerQuery = (params['query'] as String).toLowerCase();
+
+    return containers.where((container) {
+      // Search by name
+      if (container.name.toLowerCase().contains(lowerQuery)) {
+        return true;
+      }
+
+      // Search by description
+      if (container.description != null &&
+          container.description!.toLowerCase().contains(lowerQuery)) {
+        return true;
+      }
+
+      // Search by tags
+      for (final tag in container.tags) {
+        if (tag.toLowerCase().contains(lowerQuery)) {
+          return true;
+        }
+      }
+
+      // Search by QR code ID
+      if (container.qrCodeId != null &&
+          container.qrCodeId!.toLowerCase().contains(lowerQuery)) {
+        return true;
+      }
+
+      // Search by NFC tag ID
+      if (container.nfcTagId != null &&
+          container.nfcTagId!.toLowerCase().contains(lowerQuery)) {
+        return true;
+      }
+
+      return false;
+    }).toList();
+  }
+
   /// Search containers by tags
-  static List<Container> searchContainersByTags(List<String> tags) {
+  static Future<List<Container>> searchContainersByTags(List<String> tags) async {
     if (tags.isEmpty) {
       return getAllContainers();
     }
 
     try {
       final box = StorageService.containersBox;
-      final lowerTags = tags.map((t) => t.toLowerCase()).toSet();
+      final containers = box.values.toList();
       
-      return box.values.where((container) {
-        final containerTags = container.tags.map((t) => t.toLowerCase()).toSet();
-        return lowerTags.intersection(containerTags).isNotEmpty;
-      }).toList();
+      return await compute(_filterContainersByTags, {
+        'containers': containers,
+        'tags': tags,
+      });
     } catch (e) {
       debugPrint('[ContainerService] Error searching containers by tags: $e');
       return [];
     }
+  }
+
+  static List<Container> _filterContainersByTags(Map<String, dynamic> params) {
+    final containers = params['containers'] as List<Container>;
+    final tags = params['tags'] as List<String>;
+    final lowerTags = tags.map((t) => t.toLowerCase()).toSet();
+    
+    return containers.where((container) {
+      final containerTags = container.tags.map((t) => t.toLowerCase()).toSet();
+      return lowerTags.intersection(containerTags).isNotEmpty;
+    }).toList();
   }
 
   /// Link a QR code to a container

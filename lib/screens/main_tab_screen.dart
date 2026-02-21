@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'qr_poc_screen.dart';
-import 'nfc_poc_screen.dart';
+import 'nfc_tag_management_screen.dart';
 import 'container_list_screen.dart';
 import 'search_screen.dart';
 
@@ -63,7 +63,7 @@ class _MainTabScreenState extends State<MainTabScreen>
           ContainerListScreen(),
           SearchScreen(),
           QRPOCScreen(),
-          NFCPOCScreen(),
+          NFCTagManagementScreen(),
         ],
       ),
     );

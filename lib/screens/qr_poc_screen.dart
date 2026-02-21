@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../models/qr_data.dart';
 import '../services/qr_service.dart';
 import '../widgets/branded_qr_card.dart';

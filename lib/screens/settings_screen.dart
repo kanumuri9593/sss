@@ -1,24 +1,80 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/app_settings.dart';
 import '../services/preferences_service.dart';
+import '../presentation/providers/initialization_provider.dart';
+import '../presentation/controllers/settings_controller.dart';
+import '../presentation/states/settings_state.dart';
 
 /// Settings Screen
 ///
 /// Allows users to configure image recognition provider and other app settings.
-class SettingsScreen extends StatefulWidget {
+class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
   @override
-  State<SettingsScreen> createState() => _SettingsScreenState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Wait for initialization
+    final initialization = ref.watch(initializationProvider);
+    final settingsState = ref.watch(settingsControllerProvider);
+    
+    if (initialization.isLoading || settingsState is SettingsLoading) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Settings')),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+    
+    if (initialization.hasError || settingsState is SettingsError) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Settings')),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, size: 64, color: Colors.red),
+              const SizedBox(height: 16),
+              Text('Error: ${initialization.hasError ? initialization.error : (settingsState as SettingsError).message}'),
+            ],
+          ),
+        ),
+      );
+    }
+    
+    final settings = settingsState is SettingsLoaded 
+        ? settingsState.settings 
+        : AppSettings.defaultSettings();
+    
+    return _SettingsScreenContent(settings: settings);
+  }
 }
 
-class _SettingsScreenState extends State<SettingsScreen> {
+class _SettingsScreenContent extends ConsumerStatefulWidget {
+  final AppSettings settings;
+  
+  const _SettingsScreenContent({required this.settings});
+
+  @override
+  ConsumerState<_SettingsScreenContent> createState() => _SettingsScreenContentState();
+}
+
+class _SettingsScreenContentState extends ConsumerState<_SettingsScreenContent> {
   late AppSettings _settings;
 
   @override
   void initState() {
     super.initState();
-    _settings = PreferencesService.settings;
+    _settings = widget.settings;
+  }
+
+  @override
+  void didUpdateWidget(_SettingsScreenContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.settings != widget.settings) {
+      setState(() {
+        _settings = widget.settings;
+      });
+    }
   }
 
   @override
@@ -34,7 +90,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ListTile(
             title: const Text('Recognition Provider'),
             subtitle: Text(_getProviderDisplayName(_settings.imageRecognitionProvider)),
-            trailing: const Icon(Icons.chevron_right),
             onTap: _showProviderDialog,
           ),
 
@@ -163,7 +218,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() {
       _settings = newSettings;
     });
-    await PreferencesService.updateSettings(newSettings);
+    // Update through the controller which will update state immediately
+    final controller = ref.read(settingsControllerProvider.notifier);
+    final success = await controller.updateSettings(newSettings);
+    // Also update PreferencesService for backward compatibility
+    if (PreferencesService.isInitialized) {
+      await PreferencesService.updateSettings(newSettings);
+    }
+    if (success && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Settings updated')),
+      );
+    }
   }
 
   String _getProviderDisplayName(ImageRecognitionProvider provider) {
